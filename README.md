@@ -81,7 +81,9 @@ limited by its upstream indexer and project configuration.
 
 Pushing a `vMAJOR.MINOR.PATCH` Git tag discovers and builds every
 `images/*/Dockerfile` and publishes GHCR tags `MAJOR.MINOR.PATCH`,
-`MAJOR.MINOR`, `MAJOR`, and `latest` for each. For example, after creating
+`MAJOR.MINOR`, `MAJOR`, and `latest` for each. Every release also
+publishes the literal `v1` alias as a Graphit compatibility marker, independent
+of its semantic version. For example, after creating
 `v0.2.1`, run `git push origin refs/tags/v0.2.1`; the resulting image tags
-are `0.2.1`, `0.2`, `0`, and `latest`. A matching tag with an invalid
+are `0.2.1`, `0.2`, `0`, `v1`, and `latest`. A matching tag with an invalid
 semantic version fails before publication.
