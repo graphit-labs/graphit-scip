@@ -79,8 +79,9 @@ on ARM hosts through emulation; indexing is slower and may hit emulation limits.
 Full support for every project build system is
 limited by its upstream indexer and project configuration.
 
-Publishing a GitHub release with tag `MAJOR.MINOR.PATCH` or
-`vMAJOR.MINOR.PATCH` discovers and builds every `images/*/Dockerfile`
-and publishes GHCR tags `MAJOR.MINOR.PATCH`, `MAJOR.MINOR`, `MAJOR`, and
-`latest` for each. For example, `v0.2.1` yields `0.2.1`, `0.2`, `0`, and
-`latest`. A non-semantic release tag fails before publication.
+Pushing a `vMAJOR.MINOR.PATCH` Git tag discovers and builds every
+`images/*/Dockerfile` and publishes GHCR tags `MAJOR.MINOR.PATCH`,
+`MAJOR.MINOR`, `MAJOR`, and `latest` for each. For example, after creating
+`v0.2.1`, run `git push origin refs/tags/v0.2.1`; the resulting image tags
+are `0.2.1`, `0.2`, `0`, and `latest`. A matching tag with an invalid
+semantic version fails before publication.
