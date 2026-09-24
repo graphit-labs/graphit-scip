@@ -2,43 +2,26 @@
 set -eu
 
 cd /workspace
-original_index=
-if [ -e index.scip ]; then
-  original_index=$(mktemp /cache/scip-original.XXXXXX)
-  cp -p index.scip "$original_index"
-fi
-restore_index() {
-  if [ -n "$original_index" ]; then
-    cp -p "$original_index" index.scip
-    rm -f "$original_index"
-  else
-    rm -f index.scip
-  fi
-}
-trap restore_index EXIT
-trap 'exit 130' INT
-trap 'exit 143' TERM
-rm -f index.scip
+output=/output/index.scip
+rm -f "$output"
 case "${GRAPHIT_SCIP_FAMILY:?family is required}" in
   go)
     export GOPATH=/cache/go GOCACHE=/cache/go-build
-    scip-go
+    scip-go index --output "$output"
     ;;
   typescript)
     export npm_config_cache=/cache/npm COREPACK_HOME=/cache/corepack
-    if [ -f pnpm-lock.yaml ]; then
-      corepack pnpm install --prefer-offline
-      scip-typescript index --pnpm-workspaces
-    elif [ -f yarn.lock ]; then
-      corepack yarn install
-      scip-typescript index --yarn-workspaces
-    else
-      if [ -f package-lock.json ]; then
-        npm install --prefer-offline
-      elif [ -f package.json ]; then
-        npm install --prefer-offline --no-package-lock
+    if [ ! -f tsconfig.json ]; then
+      if [ ! -f /cache/graphit-tsconfig.json ]; then
+        printf '{"compilerOptions":{"allowJs":true},"include":["/workspace/**/*"],"exclude":["/workspace/**/node_modules","/workspace/**/.git","/workspace/**/.graphit","/workspace/**/.build"]}\n' > /cache/graphit-tsconfig.json
       fi
-      if [ -f tsconfig.json ]; then scip-typescript index; else scip-typescript index --infer-tsconfig; fi
+      scip-typescript index --cwd /workspace --output "$output" /cache/graphit-tsconfig.json
+    elif [ -f pnpm-lock.yaml ]; then
+      scip-typescript index --pnpm-workspaces --output "$output"
+    elif [ -f yarn.lock ]; then
+      scip-typescript index --yarn-workspaces --output "$output"
+    else
+      scip-typescript index --output "$output"
     fi
     ;;
   python)
@@ -46,14 +29,15 @@ case "${GRAPHIT_SCIP_FAMILY:?family is required}" in
     if [ ! -x /cache/venv/bin/python3 ]; then python3 -m venv /cache/venv; fi
     export PATH="/cache/venv/bin:$PATH"
     if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-    if [ -f pyproject.toml ] || [ -f setup.py ]; then pip install -e .; fi
+    # Editable installs write metadata into the source tree. Dependencies from
+    # requirements.txt still install into the cached virtual environment.
     project_version=$(python3 -c 'import pathlib, tomllib; p=pathlib.Path("pyproject.toml"); d=tomllib.loads(p.read_text()) if p.exists() else {}; print(d.get("project", {}).get("version") or d.get("tool", {}).get("poetry", {}).get("version") or "0.0.0")')
-    scip-python index . --project-name="${GRAPHIT_SCIP_PROJECT_NAME:-workspace}" --project-version="$project_version"
+    scip-python index --cwd /workspace --output "$output" --project-name="${GRAPHIT_SCIP_PROJECT_NAME:-workspace}" --project-version="$project_version"
     ;;
   java)
     export MAVEN_OPTS='-Dmaven.repo.local=/cache/maven'
     export GRADLE_USER_HOME=/cache/gradle
-    scip-java index
+    scip-java index --output="$output" --targetroot=/cache/java-target
     ;;
   clang)
     if [ -f compile_commands.json ]; then
@@ -68,50 +52,24 @@ case "${GRAPHIT_SCIP_FAMILY:?family is required}" in
       exit 2
     fi
     if [ -n "${GRAPHIT_SCIP_HOST_ROOT:-}" ]; then
-      python3 - "$compdb" /cache/graphit-compile-commands.json <<'PY'
-import json
-import os
-import re
-import sys
-
-source, output = sys.argv[1:]
-host_root = os.environ['GRAPHIT_SCIP_HOST_ROOT']
-host_roots = [host_root]
-windows_root = bool(re.match(r'^[A-Za-z]:[\\/]', host_root))
-if windows_root:
-    host_roots = [host_root.replace('\\', '/'), host_root.replace('/', '\\')]
-host_roots = sorted(set(host_roots), key=len, reverse=True)
-def container_path(value):
-    for prefix in host_roots:
-        if re.match(r'^[A-Za-z]:[\\/]', prefix):
-            value = re.sub(re.escape(prefix), '/workspace', value, flags=re.IGNORECASE)
-        else:
-            value = value.replace(prefix, '/workspace')
-    if windows_root and '/workspace' in value:
-        value = value.replace('\\', '/')
-    return value
-with open(source, encoding='utf-8') as stream:
-    commands = json.load(stream)
-for command in commands:
-    for key in ('directory', 'file', 'command'):
-        if isinstance(command.get(key), str):
-            command[key] = container_path(command[key])
-    if isinstance(command.get('arguments'), list):
-        command['arguments'] = [container_path(arg) for arg in command['arguments']]
-with open(output, 'w', encoding='utf-8') as stream:
-    json.dump(commands, stream)
-PY
+      python3 /usr/local/bin/graphit-filter-clang-compdb "$compdb" /cache/graphit-compile-commands.json
       compdb=/cache/graphit-compile-commands.json
     fi
-    scip-clang --compdb-path="$compdb"
+    scip-clang --compdb-path="$compdb" --index-output-path="$output"
     ;;
   dotnet)
     export DOTNET_CLI_HOME=/cache/dotnet NUGET_PACKAGES=/cache/nuget
-    scip-dotnet index
+    # scip-dotnet currently logs restore failures but may still exit zero with
+    # a degraded index. Restore explicitly so Graphit can use syntax fallback.
+    for project in /workspace/*.sln /workspace/*.slnx /workspace/*.csproj /workspace/*.vbproj; do
+      [ -f "$project" ] || continue
+      dotnet restore "$project" /p:EnableWindowsTargeting=true
+    done
+    scip-dotnet index --output "$output" --skip-dotnet-restore
     ;;
   rust)
     export CARGO_HOME=/cache/cargo CARGO_TARGET_DIR=/cache/target RUSTUP_HOME=/usr/local/rustup
-    rust-analyzer scip .
+    rust-analyzer scip . --output "$output"
     ;;
   ruby)
     export BUNDLE_PATH=/cache/bundle BUNDLE_APP_CONFIG=/cache/bundle-config BUNDLE_GEMFILE=/cache/scip-ruby.Gemfile
@@ -121,15 +79,14 @@ PY
     bundle install
     gem_metadata=$(ruby -e 'f=Dir.glob("*.gemspec").first; s=Gem::Specification.load(f) if f; print "#{s.name}@#{s.version}" if s')
     if [ -z "$gem_metadata" ]; then gem_metadata="${GRAPHIT_SCIP_PROJECT_NAME:-workspace}@0.0.0"; fi
-    if [ -f sorbet/config ]; then bundle exec scip-ruby --gem-metadata "$gem_metadata"; else bundle exec scip-ruby --gem-metadata "$gem_metadata" .; fi
+    if [ -f sorbet/config ]; then bundle exec scip-ruby --gem-metadata "$gem_metadata" --index-file "$output"; else bundle exec scip-ruby --gem-metadata "$gem_metadata" --index-file "$output" .; fi
     ;;
   dart)
     export PUB_CACHE=/cache/pub
     if [ ! -d "$PUB_CACHE/global_packages/scip_dart" ]; then
       dart pub global activate scip_dart 1.6.2
     fi
-    dart pub get
-    dart pub global run scip_dart ./
+    dart pub global run scip_dart --output "$output" ./
     ;;
   php)
     export COMPOSER_HOME=/cache/composer COMPOSER_CACHE_DIR=/cache/composer-cache
@@ -137,14 +94,14 @@ PY
       echo 'PHP SCIP requires composer.json and composer.lock' >&2
       exit 2
     fi
-    composer install --no-interaction --prefer-dist
-    /opt/scip-php/vendor/bin/scip-php
+    # PHP variables must reach the interpreter literally.
+    # shellcheck disable=SC2016
+    php -r 'require "/opt/scip-php/vendor/autoload.php"; $indexer = new \ScipPhp\Indexer("/workspace", "0.0.1", []); file_put_contents("/output/index.scip", $indexer->index()->serializeToString());'
     ;;
   *) echo "unknown SCIP family: $GRAPHIT_SCIP_FAMILY" >&2; exit 2 ;;
 esac
 
-if [ ! -s index.scip ]; then
+if [ ! -s "$output" ]; then
   echo 'indexer did not produce index.scip' >&2
   exit 1
 fi
-cp index.scip /output/index.scip

@@ -4,5 +4,6 @@ RUN curl -fsSL https://github.com/sourcegraph/scip-clang/releases/download/v0.4.
 ENV GRAPHIT_SCIP_FAMILY=clang
 COPY scripts/entrypoint.sh /usr/local/bin/graphit-scip-index
 COPY scripts/run-indexer.sh /usr/local/bin/graphit-scip-run
+COPY scripts/filter-clang-compdb.py /usr/local/bin/graphit-filter-clang-compdb
 RUN chmod +x /usr/local/bin/graphit-scip-index /usr/local/bin/graphit-scip-run
 ENTRYPOINT ["/usr/local/bin/graphit-scip-index"]

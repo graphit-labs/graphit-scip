@@ -2,3 +2,4 @@
 !scripts/
 !scripts/entrypoint.sh
 !scripts/run-indexer.sh
+!scripts/filter-clang-compdb.py
