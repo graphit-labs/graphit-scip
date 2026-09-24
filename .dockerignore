@@ -1,0 +1,4 @@
+**
+!scripts/
+!scripts/entrypoint.sh
+!scripts/run-indexer.sh

@@ -1,0 +1,11 @@
+{
+  "project": {
+    "id": "01M38BCCWFHWK1KNE1E8N3TJPJ",
+    "name": "graphit-scip",
+    "description": "Scip images for Graphit Code"
+  },
+  "agents": [
+    "codex"
+  ],
+  "artifacts": {}
+}

@@ -1,0 +1,99 @@
+name: Release SCIP images
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: scip-image-release
+  cancel-in-progress: false
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      patch: ${{ steps.semver.outputs.patch }}
+      minor: ${{ steps.semver.outputs.minor }}
+      major: ${{ steps.semver.outputs.major }}
+      families: ${{ steps.images.outputs.families }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: semver
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        shell: bash
+        run: |
+          if [[ ! "$RELEASE_TAG" =~ ^v?(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "Release tag must be MAJOR.MINOR.PATCH or vMAJOR.MINOR.PATCH" >&2
+            exit 1
+          fi
+          major="${BASH_REMATCH[1]}"
+          minor="${BASH_REMATCH[2]}"
+          patch="${BASH_REMATCH[3]}"
+          {
+            echo "patch=$major.$minor.$patch"
+            echo "minor=$major.$minor"
+            echo "major=$major"
+          } >> "$GITHUB_OUTPUT"
+      - id: images
+        shell: bash
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          from pathlib import Path
+
+          families = sorted(path.parent.name for path in Path('images').glob('*/Dockerfile'))
+          if not families:
+              raise SystemExit('No SCIP Dockerfiles found under images/')
+          print('families=' + json.dumps(families, separators=(',', ':')))
+          PY
+
+  images:
+    needs: version
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        family: ${{ fromJSON(needs.version.outputs.families) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v3
+      - id: platforms
+        env:
+          FAMILY: ${{ matrix.family }}
+        run: |
+          case "$FAMILY" in
+            clang|ruby) echo "value=linux/amd64" >> "$GITHUB_OUTPUT" ;;
+            *) echo "value=linux/amd64,linux/arm64" >> "$GITHUB_OUTPUT" ;;
+          esac
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/metadata-action@v5
+        id: meta
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/graphit-scip-${{ matrix.family }}
+          tags: |
+            type=raw,value=${{ needs.version.outputs.patch }}
+            type=raw,value=${{ needs.version.outputs.minor }}
+            type=raw,value=${{ needs.version.outputs.major }}
+            type=raw,value=latest
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: images/${{ matrix.family }}/Dockerfile
+          platforms: ${{ steps.platforms.outputs.value }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.family }}
+          cache-to: type=gha,scope=${{ matrix.family }},mode=max
