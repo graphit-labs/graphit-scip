@@ -1,0 +1,1 @@
+<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net10.0</TargetFramework><LangVersion>16.9</LangVersion><RootNamespace>GraphitModern</RootNamespace><DefineConstants>GRAPHIT_CUSTOM=True,GRAPHIT_ESCAPED=&quot;slash\percent%25semi%3Bquote&quot;&quot;word&quot;</DefineConstants><NuGetAudit>false</NuGetAudit></PropertyGroup></Project>

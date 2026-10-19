@@ -1,0 +1,5 @@
+#!/bin/sh
+set -eu
+actionlint
+git diff --cached --check
+cargo fmt --all -- --check

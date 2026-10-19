@@ -1,5 +1,10 @@
 **
-!scripts/
-!scripts/entrypoint.sh
-!scripts/run-indexer.sh
-!scripts/filter-clang-compdb.py
+!Cargo.toml
+!Cargo.lock
+!src/
+!src/**
+!vendor/
+!vendor/scip-dotnet/
+!vendor/scip-dotnet/**
+!vendor/roslyn-msbuild/
+!vendor/roslyn-msbuild/**

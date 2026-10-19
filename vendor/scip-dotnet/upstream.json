@@ -1,0 +1,101 @@
+{
+  "status": "in_progress",
+  "repository": "https://github.com/sourcegraph/scip-dotnet",
+  "commit": "3e1f671e65692f517b0d35521fd1951c63939e3c",
+  "upstream_version": "0.2.14",
+  "package_version": "0.2.14-graphit.2",
+  "target_framework": "net10.0",
+  "archive_url": "https://codeload.github.com/sourcegraph/scip-dotnet/tar.gz/3e1f671e65692f517b0d35521fd1951c63939e3c",
+  "archive_sha256": "6ec527899eecb016ad1b7b3f69d87de6c4d7b31b3ea5202d6b9169e276eb912d",
+  "patch_sha256": "b986ef5eace3f7305cdf8a66da027bb1675662cf3dce579d74b76a56b689fbeb",
+  "sdk_image": "mcr.microsoft.com/dotnet/sdk:10.0.401-noble@sha256:e70cdb7f80b0348f5cb85f19a8f670fca061f033d57eed12fa003d58b0e06317",
+  "sdk_version": "10.0.401",
+  "sdk_amd64_manifest": "sha256:0eeb52c76e35a5431ca707ad2bc75e38006a05393045d8532ae44c15d9474523",
+  "protocol_backport": {
+    "source": "https://raw.githubusercontent.com/scip-code/scip/v0.10.0/scip.proto",
+    "source_sha256": "b38021b65ef90cbbf6af9c829ff75192859ad9b5da05439ef154bea4ceb2bf03",
+    "field": 6,
+    "utf16_enum": 2,
+    "protoc_version": "3.21.12",
+    "protoc_sha256": "332fe6d2b4f49388f0fe37a19395b96898e68da1418fec267cd6a37eca25f77a",
+    "command": "protoc --csharp_out=ScipDotnet scip.proto"
+  },
+  "sources": {
+    "scip.proto": {
+      "upstream_sha256": "13f8662501dd7d0b1a3efd65521be3ccad33e18aac5c9788f51a1188519dc5e9",
+      "patched_sha256": "b851d59aad37fd323dffcb9531b59c2c45614ef348ca085b863d1395f1650a5e"
+    },
+    "ScipDotnet/Scip.cs": {
+      "upstream_sha256": "30c6eb3145d8fbd72f167c9e024ca105c7cd7dbf16408b627c6ba5d2c4d18a18",
+      "patched_sha256": "108b634b6089cb3746a3c1f8b6e25602d90051a087d50817fdb119e53b4fba84"
+    },
+    "ScipDotnet/ScipSymbol.cs": {
+      "upstream_sha256": "1ecbd22d18b24e1d8b7f631ff8464ec1dfd380a81f6f4b2ab5b4dae7784a3401",
+      "patched_sha256": "f63eff0ac9fe9a57fd05b06e7da4fe7ad02709420f57694c400aa0d3a84bb18b"
+    },
+    "ScipDotnet/ScipDocumentIndexer.cs": {
+      "upstream_sha256": "71c98169f0ed7bdfdcd8e2b893cd32cb50271241a0302d503a878a3913a53ea5",
+      "patched_sha256": "f5390f45f6dec917dffe2c49dcc2c2f808db6d26adb8c66b97f605722b60ab13"
+    },
+    "ScipDotnet/ScipProjectIndexer.cs": {
+      "upstream_sha256": "39a2236133cec363af9d2a2602ac81cb43843d95406fe2647cc41e8b89054fc5",
+      "patched_sha256": "ec14be4bbecc0c3ce4096d78efc965f43311c1a614b7c7555b671f2d8ccaf6e4"
+    },
+    "ScipDotnet/IndexCommandHandler.cs": {
+      "upstream_sha256": "cb721cf5e9b6194a6010cd6726aa35efac482cb98eabe65e806db0d68d03393f",
+      "patched_sha256": "89f4217380c1c24ef3bc1653ece8e11438af084652596d426175696e3b6eaa70"
+    },
+    "ScipDotnet/ScipCSharpSyntaxWalker.cs": {
+      "upstream_sha256": "61d69a600b1cb6ebacfb3821019b277e64ca8c7ff74fe0aea0abeac62235418f",
+      "patched_sha256": "59839bdb1455a5a2d26769a8fcf2afbcd5225901d5a763618ab67c412a18c056"
+    },
+    "ScipDotnet/ScipVisualBasicSyntaxWalker.cs": {
+      "upstream_sha256": "7d1d0248b91d5ee434e1c1b22e21aadbc322153c589152d5a7414a15c60ecfe0",
+      "patched_sha256": "07a67b6d7f808053e37a42d1d7fd6cff2905027090a65d30652bf02eb5dc3ad0"
+    },
+    "ScipDotnet/ScipSymbolOrigins.cs": {
+      "upstream_sha256": null,
+      "patched_sha256": "fc03b4d3f8e5188c5813b1a0c9726d454b3a0ac86a0eec8681781fada2cfe09a"
+    },
+    "ScipDotnet/ScipDotnet.csproj": {
+      "upstream_sha256": "00e72b93ada4e3f42bb95c14d049ba54db54b98998dd77d0ab0ac7902f01187c",
+      "patched_sha256": "8c1dd5b52472af2cd46d6cbe243bdd97318894f203b064db1239b670d136a81a"
+    },
+    "ScipDotnet/Program.cs": {
+      "upstream_sha256": "be49e170b85f1b7484a61e62134883efd13201e3c5d5fffc6b657050387d1cf3",
+      "patched_sha256": "d0561718565550addf28fdbfcfdb245324bff85b3ca9b32fde231f1da1366969"
+    }
+  },
+  "roslyn_version": "5.9.0",
+  "roslyn_commit": "35d9211b841e7613c1d2f8f5af6d628ace696c4c",
+  "configuration_manager_version": "10.0.1",
+  "configuration_manager_reason": "actual NU1605 and Roslyn5.9 CSharp.Features minimum dependency",
+  "recipe_sha256": "0e95305381d5d7c27e66d0495596d62178beadbd32d641ddbf72988ed19d799f",
+  "roslyn_source_build": "vendor/roslyn-msbuild/upstream.json",
+  "attributions": [
+    {
+      "source": "vendor/roslyn-msbuild/LICENSE",
+      "package_root": "GraphitRoslyn.LICENSE",
+      "runtime_path": "/opt/vendor-provenance/roslyn-source/LICENSE",
+      "sha256": "ae48df11a335dc1a615f4f938b69cba73bcf4485c4f97af49b38efb0f216353b"
+    },
+    {
+      "source": "vendor/roslyn-msbuild/NOTICE",
+      "package_root": "GraphitRoslyn.NOTICE",
+      "runtime_path": "/opt/vendor-provenance/roslyn-source/NOTICE",
+      "sha256": "3c76292340eb805fcf66c9b2bd935cb688664a6a516a7dccbec5a423a957895d"
+    },
+    {
+      "source": "vendor/scip-dotnet/NOTICE",
+      "package_root": "NOTICE",
+      "runtime_path": "/opt/vendor-provenance/scip-dotnet/NOTICE",
+      "sha256": "3fda3acb664b70d172e20d9cf6d36d14fbcee74684bec591821a62f966fbdc9a"
+    },
+    {
+      "source": "vendor/scip-dotnet/LICENSE",
+      "package_root": "LICENSE",
+      "runtime_path": "/opt/vendor-provenance/scip-dotnet/LICENSE",
+      "sha256": "a1e21e6913ed5e24be5feca0099ab7ad34966b8d36c59d2cb2c3b05a6db39457"
+    }
+  ]
+}

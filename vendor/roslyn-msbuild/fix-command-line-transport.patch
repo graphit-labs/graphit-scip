@@ -1,0 +1,60 @@
+--- a/global.json
++++ b/global.json
+@@ -1,11 +1,11 @@
+ {
+   "sdk": {
+-    "version": "10.0.109",
++    "version": "10.0.401",
+     "allowPrerelease": false,
+     "rollForward": "patch"
+   },
+   "tools": {
+-    "dotnet": "10.0.109",
++    "dotnet": "10.0.401",
+     "vs": {
+       "version": "17.14.0"
+     },
+--- a/src/Compilers/Core/MSBuildTask/ManagedToolTask.cs
++++ b/src/Compilers/Core/MSBuildTask/ManagedToolTask.cs
+@@ -218,7 +218,11 @@
+             var items = new ITaskItem[commandLineArgs.Count];
+             for (var i = 0; i < commandLineArgs.Count; i++)
+             {
+-                items[i] = new TaskItem(commandLineArgs[i]);
++                // Graphit vendor transport: preserve the original argument before path normalization.
++                var item = new TaskItem();
++                ((ITaskItem2)item).SetMetadataValueLiteral("GraphitRawCommandLineV1", commandLineArgs[i]);
++                item.ItemSpec = commandLineArgs[i];
++                items[i] = item;
+             }
+ 
+             return items;
+--- a/src/Workspaces/MSBuild/BuildHost/MSBuild/ProjectFile/ProjectInstanceReader.cs
++++ b/src/Workspaces/MSBuild/BuildHost/MSBuild/ProjectFile/ProjectInstanceReader.cs
+@@ -170,17 +170,20 @@
+             return [];
+         }
+ 
++        // Graphit vendor transport: command-line arguments are opaque metadata, never paths.
+         var commandLineArgs = _commandLineProvider.GetCompilerCommandLineArgs(project)
+-            .Select(item => item.ItemSpec)
++            .Select(item =>
++            {
++                if (item is not MSB.Execution.ProjectItemInstance argument ||
++                    !argument.HasMetadata("GraphitRawCommandLineV1"))
++                    throw new InvalidOperationException("Compiler argument metadata GraphitRawCommandLineV1 is missing.");
++                return argument.GetMetadataValue("GraphitRawCommandLineV1");
++            })
+             .ToArray();
+ 
+         if (commandLineArgs.Length == 0)
+         {
+-            // We didn't get any command-line args, which likely means that the build
+-            // was not successful. In that case, try to read the command-line args from
+-            // the ProjectInstance that we have. This is a best effort to provide something
+-            // meaningful for the user, though it will likely be incomplete.
+-            commandLineArgs = _commandLineProvider.ReadCommandLineArgs(project);
++            throw new InvalidOperationException("The same build produced no compiler command-line arguments.");
+         }
+ 
+         return commandLineArgs;

@@ -1,29 +1,42 @@
 # Graphit SCIP images
 
+Graphit Code indexes code through SCIP by default. These specialized Docker
+producers supply compiler indexes; missing or failed native results fall back
+to the configured Tree-sitter or ANTLR parsers, which also emit SCIP. There is
+no SCIP opt-in flag. Syntax profiles continue to supply Graphit's additional
+relationships, documentation, metrics and embedding projections.
+
 Each image reads a project through `/workspace` and writes the SCIP protobuf
 directly to `/output/index.scip`. Graphit Code mounts the source read-only at
-`/source` and gives the image a fresh Docker volume at `/overlay`. With
+`/source` and gives the image a fresh ephemeral mount at `/overlay`. With
 `GRAPHIT_SCIP_OVERLAY=1`, the shared entrypoint mounts OverlayFS at `/workspace`:
 `/source` is the lower layer and `/overlay/upper` and `/overlay/work` are on the
 Docker daemon's Linux filesystem. Build artifacts and temporary writes go to
 the upper layer; OverlayFS copies only files actually modified, and the
-original source stays unchanged. The volume and
+original source stays unchanged. The temporary mount and
 container are removed after each parse. `/output` and persistent `/cache`
-remain in Graphit Code's global AST directory. The entrypoint requires
-`GRAPHIT_SCIP_UID` and `GRAPHIT_SCIP_GID`; it mounts the overlay before dropping
-to that identity, all capabilities, and `no-new-privs`. Docker must permit the
+remain in Graphit Code's global AST directory. The entrypoint requires either
+the numeric pair `GRAPHIT_SCIP_UID` and `GRAPHIT_SCIP_GID`, or the explicit
+`GRAPHIT_SCIP_OWNER=output-mount` mode with both numeric variables absent. That
+mode reads the existing `/output` directory's Linux UID/GID inside the container
+before creating directories, changing ownership or mounting the overlay. An
+unknown mode, a mixed or incomplete selection, or invalid numeric IDs fails
+before those effects. In `output-mount` mode, an absent or non-directory output
+mount also fails before effects; the numeric-pair mode retains its later
+directory creation. No UID/GID is inferred
+from a Windows SID or replaced with zero. The entrypoint mounts the overlay
+before dropping to the selected identity, all capabilities, and `no-new-privs`.
+Docker must permit the
 mount with `SYS_ADMIN` and `apparmor=unconfined`. An unsupported mount fails the
-SCIP run so Graphit Code can use its syntax parser. Graphit Code also binds
-the source read-only at `/workspace` for older images that do not recognize
-overlay mode. The image accepts that direct mount when overlay mode is omitted
+SCIP run so Graphit Code can use its syntax parser. The image also accepts a direct `/workspace` mount when overlay mode is omitted
 for standalone use.
 The merged tree retains POSIX permissions from source entries. A nested
 directory that is mode `0555` for the indexer UID can still reject a write;
-that indexer then falls back to syntax parsing without modifying the source.
+that indexer then falls back to syntax parsing and SCIP generation without
+modifying the source.
 
 For a standalone manual run on a native Linux Docker daemon, build the local
-image and keep the output and cache outside the source project. The published
-`v1` image predates overlay mode:
+image and keep the output and cache outside the source project:
 
 ```sh
 artifact_root="${GRAPHIT_GLOBAL_DIR:-$HOME/.graphit}/ast/scip-smoke"
@@ -40,8 +53,12 @@ docker run --rm --cap-add=SYS_ADMIN --security-opt=apparmor=unconfined \
   graphit-scip-go:dev
 ```
 
-On Windows and macOS, Graphit Code passes UID/GID `0` for Docker Desktop
-bind-mount mapping; it also uses absolute host paths. The wrapper never
+On Unix hosts, Graphit Code passes the actual output owner's numeric UID/GID.
+On Windows it passes only `GRAPHIT_SCIP_OWNER=output-mount`; the Linux container
+observes ownership of the bind mount instead of translating a Windows identity.
+An observed UID/GID of zero is used only when it is the real mount owner; zero
+also remains valid when explicitly supplied in the numeric pair. Both paths use
+absolute host paths. The wrapper never
 writes `index.scip` into the project. TypeScript without `tsconfig.json` uses
 an inferred configuration in `/cache` with root files selected by Graphit's
 recursive ignore checker. Home, temporary files and XDG caches
@@ -59,8 +76,6 @@ global AST cache. Ignore/config changes and source
 removals refresh that family; when no roots remain, it clears the old raw
 `index.scip`. Scoped watcher edits also apply nested ignore rules before
 SCIP or syntax parsing.
-The [ignore prefilter audit](docs/ignore-prefilter-audit.md) records each
-indexer's selection options, measured fixtures, and the remaining work.
 For C/C++, Graphit Code also supplies `GRAPHIT_SCIP_HOST_ROOT`; the wrapper
 rewrites absolute host paths in `compile_commands.json` to `/workspace` and
 stores the translated database in `/cache`. When Graphit Code supplies its
@@ -70,6 +85,21 @@ resolved stay in the derived database for Graphit's final document filter.
 The manifest and database are generated outside the source project. Linux,
 Windows and macOS path formats are handled in the translation; Docker Desktop
 execution on Windows/macOS still needs native smoke validation.
+The clang image uses a Rust binary for this translation, with bounded input and
+output and no Python filter dependency. See the [compilation database filter
+reference](docs/compdb-filter.md) for invocation, limits, selection, errors and
+focused validation.
+
+The Rust `scip-run` dispatcher implements all ten indexer sequences, including
+dependency caches, build-system priorities and output validation. The images
+copy the native dispatcher and `scip-entrypoint`; upstream indexers and language
+runtimes remain vendor tools. See the [dispatcher reference](docs/scip-dispatch.md)
+for configuration, errors and focused image smoke tests.
+
+The .NET image builds the [corrected external producer](docs/scip-dotnet-vendor.md)
+from pinned source and installs its local net10 package, `0.2.14-graphit.2`.
+Its smoke test exercises original and modern C#/Visual Basic projects using the
+real dispatcher and official SCIP CLI.
 
 | Image suffix | Languages | Indexer | Project prerequisites |
 | --- | --- | --- | --- |
@@ -78,10 +108,10 @@ execution on Windows/macOS still needs native smoke validation.
 | `python` | Python | scip-python 0.6.6 | Python 3.10+; requirements/pyproject installed when present |
 | `java` | Java, Kotlin | scip-java 0.13.1 | supported Gradle/Maven build; JVM compatibility |
 | `clang` | C, C++ | scip-clang 0.4.0 | `compile_commands.json` or CMake project |
-| `dotnet` | C#, Visual Basic | scip-dotnet 0.2.14 | solution/project and restoreable dependencies |
+| `dotnet` | C#, Visual Basic | scip-dotnet 0.2.14-graphit.2 | solution/project and restoreable dependencies |
 | `rust` | Rust | rust-analyzer | Cargo project |
 | `ruby` | Ruby | scip-ruby 0.4.8 | Gemfile/sorbet config optional, Sorbet improves precision |
-| `dart` | Dart | scip_dart 1.6.2 | pubspec.yaml |
+| `dart` | Dart | scip_dart 1.6.2 | pubspec.yaml and package configuration from `dart pub get` |
 | `php` | PHP | davidrjenni/scip-php commit `71a5b11` | composer.json, lock and existing vendor directory |
 
 To smoke test any family locally, prepare a small project satisfying its row
@@ -107,8 +137,11 @@ docker run --rm --cap-add=SYS_ADMIN --security-opt=apparmor=unconfined \
 test -s "$smoke_root/output/index.scip"
 ```
 
-On Windows/macOS, use host absolute paths and UID/GID `0` in this manual
-command. For C/C++ compilation databases created on the host, also pass
+On Windows, use host absolute paths and replace both UID/GID options in this
+manual command with `-e GRAPHIT_SCIP_OWNER=output-mount`; `/output` must already
+be mounted as a directory. Do not combine that option with either numeric
+identity variable, even an empty one. On macOS, keep the actual Unix output
+owner's numeric pair. For C/C++ compilation databases created on the host, also pass
 `GRAPHIT_SCIP_HOST_ROOT=$project_path` to translate paths into `/workspace`.
 Overlay mode has been verified with Maven on Linux. Native Docker Desktop
 checks on Windows and macOS remain pending.
@@ -117,7 +150,7 @@ The pinned scip-java release indexes Java and Kotlin; its Scala support was
 removed upstream, so Scala continues through Graphit Code's syntax grammar.
 
 An indexer failure or a missing SCIP document lets Graphit Code use its
-syntax parsers for that file. The images contain the indexer and language
+syntax parsers to generate SCIP for that file. The images contain the indexer and language
 toolchain; project dependencies may need network access on the first run. The
 `clang` and `ruby` binaries currently target Linux amd64, so the release
 workflow builds that platform for those two families. The other images publish
@@ -126,11 +159,32 @@ on ARM hosts through emulation; indexing is slower and may hit emulation limits.
 Full support for every project build system is
 limited by its upstream indexer and project configuration.
 
-Pushing a `vMAJOR.MINOR.PATCH` Git tag discovers and builds every
-`images/*/Dockerfile` and publishes GHCR tags `MAJOR.MINOR.PATCH`,
-`MAJOR.MINOR`, `MAJOR`, and `latest` for each. Every release also
-publishes the literal `v1` alias as a Graphit compatibility marker, independent
-of its semantic version. For example, after creating
-`v0.2.1`, run `git push origin refs/tags/v0.2.1`; the resulting image tags
-are `0.2.1`, `0.2`, `0`, `v1`, and `latest`. A matching tag with an invalid
-semantic version fails before publication.
+The release workflow uses the Rust `release-metadata` executable to validate a
+`vMAJOR.MINOR.PATCH` Git tag and discover regular, non-symlink
+`images/*/Dockerfile` files. It generates a sorted family/platform matrix and
+GHCR tags `MAJOR.MINOR.PATCH`, `MAJOR.MINOR`, `MAJOR`, `v1`, and `latest`.
+The literal `v1` alias is the image tag Graphit Code currently selects by
+default, independent of the release's semantic version. For example, `v0.2.1`
+produces tags `0.2.1`, `0.2`, `0`, `v1`, and `latest`. Invalid versions or image
+metadata stop the producer before Docker publication steps run. See the
+[release metadata reference](docs/release-images.md) for local validation,
+limits, workflow consumers and focused checks.
+
+The .NET source build uses the pinned SDK and Roslyn sources, including the
+13 localization satellites. Its four original/modern C# and Visual Basic
+projects passed cold/warm indexing and official SCIP print/lint/stats. The
+external producer, package attribution and supported SDK behavior are described
+in the [vendor reference](docs/scip-dotnet-vendor.md).
+
+Run `cargo run --locked --bin xtask -- check` for formatting, strict Clippy and
+Rust tests. The pre-commit hook runs staged whitespace, workflow lint and Rust formatting checks.
+Pre-push retains the complete check above and runs the longer
+dependency audit and the clang image smoke test. Other image smoke tests run
+explicitly for the affected family.
+
+GitHub CI runs the Rust contracts on Linux, Windows and macOS, the clang image
+smoke on Linux, and workflow validation with actionlint 1.7.12 downloaded from
+its official release and verified by SHA-256. The image release calls the same
+CI workflow at the tag's commit; publishing waits for all its jobs and release
+metadata generation to succeed. These workflow definitions do not establish
+that an unpublished local commit has passed hosted CI.

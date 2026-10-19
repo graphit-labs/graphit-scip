@@ -1,0 +1,31 @@
+{
+  "baseline_git_revision": "cae5de51225ab27308ac7a5e28e7eeb3a59e35a5",
+  "baseline_source_sha256": "b6e93e4619d866a82167d4993525d72e24be15e01cbc58e15c56aa725e9fddee",
+  "root": "C:\\Work",
+  "allowed": [
+    "Straße.cpp"
+  ],
+  "commands": [
+    {
+      "directory": "C:\\Work",
+      "file": "STRASSE.cpp",
+      "command": "clang -c straße.cpp"
+    }
+  ],
+  "historical_output": [
+    {
+      "directory": "/workspace",
+      "file": "/workspace/Straße.cpp",
+      "command": "clang -c straße.cpp"
+    }
+  ],
+  "expected_output": [
+    {
+      "directory": "/workspace",
+      "file": "/workspace/Straße.cpp",
+      "command": "clang -c Straße.cpp"
+    }
+  ],
+  "unresolved": 0,
+  "defect": "Inherited simple-regex command matching did not expand Unicode casefold; canonical spelling is required for Linux container lookup."
+}

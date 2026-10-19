@@ -1,0 +1,29 @@
+[package]
+name = "graphit-scip-tools"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.98"
+license = "Apache-2.0"
+
+[dependencies]
+aho-corasick = "=1.1.5"
+serde = { version = "=1.0.228", features = ["derive"] }
+serde_json = { version = "=1.0.151", features = ["arbitrary_precision", "raw_value"] }
+regex = "=1.13.1"
+caseless = "=0.2.2"
+same-file = "=1.0.6"
+semver = "=1.0.28"
+process-wrap = { version = "=10.0.1", default-features = false, features = ["std", "process-group", "job-object", "creation-flags"] }
+ctrlc = { version = "=3.5.2", features = ["termination"] }
+protobuf = "=3.7.2"
+scip = "=0.10.0"
+tempfile = "=3.23.0"
+toml = { version = "=1.1.7", default-features = false, features = ["std", "serde", "parse"] }
+
+[target.'cfg(unix)'.dependencies]
+nix = { version = "=0.31.1", default-features = false, features = ["signal"] }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true

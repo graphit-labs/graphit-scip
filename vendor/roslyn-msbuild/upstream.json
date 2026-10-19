@@ -1,0 +1,55 @@
+{
+  "repository": "https://github.com/dotnet/roslyn",
+  "commit": "35d9211b841e7613c1d2f8f5af6d628ace696c4c",
+  "archive_url": "https://codeload.github.com/dotnet/roslyn/tar.gz/35d9211b841e7613c1d2f8f5af6d628ace696c4c",
+  "archive_sha256": "a479b751c9809aece5cdb7eec0bcc6eb1f75b4e927af29dd86c30287c2e6201c",
+  "archive_bytes": 59942836,
+  "license": "MIT",
+  "license_sha256": "ae48df11a335dc1a615f4f938b69cba73bcf4485c4f97af49b38efb0f216353b",
+  "patch_sha256": "715b0e4cce59f56a988dc1c56e7c6913e6cdad0dd99acf0950e5b1c6111f4cec",
+  "sources": {
+    "global.json": {
+      "upstream_sha256": "c42f416408d5f48fa55e8026d85922e40835ce51dc787d5e4bd029c5fe002460",
+      "patched_sha256": "300ee9927c50baafd477fa8debbd2dcf5cef2e31f44cdc5c61d7cf76add2de26"
+    },
+    "src/Compilers/Core/MSBuildTask/ManagedToolTask.cs": {
+      "upstream_sha256": "b130849c5d004cc994db7045ca4f2678a6d45d70cb858a85f751686986837ac2",
+      "patched_sha256": "23d6f7420d3ad24b0ae1de8beba349acc84c88ef9b98697cc67ede79f8e36e4b"
+    },
+    "src/Workspaces/MSBuild/BuildHost/MSBuild/ProjectFile/ProjectInstanceReader.cs": {
+      "upstream_sha256": "ba7365439727c68ee6368101e06a2e54b64455d7ff26fecb1e7197095981d66e",
+      "patched_sha256": "ce286619d22db508cee670416bb165a92a31738d4e2e2bc859de7d20d3ecd0fa"
+    }
+  },
+  "sdk_version": "10.0.401",
+  "target_framework": "net10.0",
+  "host_locator_version": "1.10.2",
+  "metadata_key": "GraphitRawCommandLineV1",
+  "projects": {
+    "task": "src/Compilers/Core/MSBuildTask/MSBuild/Microsoft.Build.Tasks.CodeAnalysis.csproj",
+    "host": "src/Workspaces/MSBuild/BuildHost/Microsoft.CodeAnalysis.Workspaces.MSBuild.BuildHost.csproj",
+    "contracts": "src/Workspaces/MSBuild/Contracts/Microsoft.CodeAnalysis.Workspaces.MSBuild.Contracts.csproj"
+  },
+  "properties": {
+    "TargetFrameworks": "net10.0",
+    "NetCurrent": "net10.0",
+    "NetRoslynBuildHostNetCoreVersion": "net10.0",
+    "DotNetBuildSourceOnly": "true",
+    "DotNetBuildTests": "false",
+    "DotNetUseShippingVersions": "true"
+  },
+  "runtime_layout": {
+    "task": "GraphitRoslyn/Tasks",
+    "host": "BuildHost-netcore",
+    "task_count": 20,
+    "host_count": 20,
+    "unique_paths": 40,
+    "contracts_extra_runtime": false
+  },
+  "source_output_counts": {
+    "task": 20,
+    "host": 20,
+    "contracts": 3
+  },
+  "status": "source_compiled_distribution_in_progress"
+}

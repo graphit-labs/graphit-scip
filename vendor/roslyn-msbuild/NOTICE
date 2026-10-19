@@ -1,0 +1,5 @@
+Microsoft Roslyn MSBuild argument transport components
+Source: dotnet/roslyn commit 35d9211b841e7613c1d2f8f5af6d628ace696c4c
+Copyright (c) .NET Foundation and Contributors. Distributed under MIT.
+Graphit modifications: preserve original compiler arguments as literal item metadata; require that metadata in the same-build host reader; select the already fixed SDK10.0.401 for the private source build.
+The local assembly build identities are recorded as local builds, not published NuGet binaries.

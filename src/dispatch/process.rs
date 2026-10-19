@@ -1,0 +1,186 @@
+use super::{Control, Error, MAX_CAPTURE_BYTES};
+use process_wrap::std::{ChildWrapper, CommandWrap};
+use std::{
+    io::Read,
+    process::{Command, ExitStatus, Stdio},
+    sync::mpsc,
+    thread,
+    time::{Duration, Instant},
+};
+
+const POLL: Duration = Duration::from_millis(20);
+const FAST_POLL: Duration = Duration::from_millis(1);
+const DRAIN: Duration = Duration::from_secs(1);
+
+struct OwnedChild {
+    inner: Box<dyn ChildWrapper>,
+    stopped: bool,
+}
+impl OwnedChild {
+    fn stop(&mut self) -> Result<(), Error> {
+        if self.stopped {
+            return Ok(());
+        }
+        if let Err(error) = self.inner.start_kill() {
+            #[cfg(unix)]
+            if error.raw_os_error() != Some(nix::errno::Errno::ESRCH as i32) {
+                return Err(Error::Io);
+            }
+            #[cfg(not(unix))]
+            return Err(Error::Io);
+        }
+        self.inner.wait().map_err(|_| Error::Io)?;
+        self.stopped = true;
+        Ok(())
+    }
+}
+impl Drop for OwnedChild {
+    fn drop(&mut self) {
+        let _ = self.stop();
+    }
+}
+
+fn status(status: ExitStatus) -> Result<(), Error> {
+    if status.success() {
+        return Ok(());
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::ExitStatusExt;
+        Err(Error::Child(
+            status
+                .code()
+                .unwrap_or_else(|| 128 + status.signal().unwrap_or(1)),
+        ))
+    }
+    #[cfg(not(unix))]
+    Err(Error::Child(status.code().unwrap_or(1)))
+}
+
+fn spawn(command: Command, capture: bool) -> Result<OwnedChild, Error> {
+    let mut command = command;
+    command.stdin(Stdio::inherit()).stderr(Stdio::inherit());
+    command.stdout(if capture {
+        Stdio::piped()
+    } else {
+        Stdio::inherit()
+    });
+    let mut wrapper = CommandWrap::from(command);
+    #[cfg(unix)]
+    wrapper.wrap(process_wrap::std::ProcessGroup::leader());
+    #[cfg(windows)]
+    wrapper.wrap(process_wrap::std::JobObject);
+    wrapper
+        .spawn()
+        .map(|inner| OwnedChild {
+            inner,
+            stopped: false,
+        })
+        .map_err(|error| match error.kind() {
+            std::io::ErrorKind::NotFound => Error::MissingTool,
+            std::io::ErrorKind::PermissionDenied => Error::DeniedTool,
+            _ => Error::Io,
+        })
+}
+
+pub(super) fn execute(
+    command: Command,
+    control: &Control,
+    capture: bool,
+) -> Result<Vec<u8>, Error> {
+    control.check()?;
+    let mut child = spawn(command, capture)?;
+    let started = Instant::now();
+    let reader = if capture {
+        let mut stdout = child.inner.stdout().take().ok_or(Error::Io)?;
+        let (sender, receiver) = mpsc::sync_channel(1);
+        let thread = thread::Builder::new()
+            .name("scip-metadata".into())
+            .spawn(move || {
+                let result = (|| {
+                    let mut bytes = Vec::new();
+                    bytes
+                        .try_reserve_exact(MAX_CAPTURE_BYTES)
+                        .map_err(|_| Error::Limit)?;
+                    let mut chunk = [0u8; 4096];
+                    loop {
+                        let count = stdout.read(&mut chunk).map_err(|_| Error::Io)?;
+                        if count == 0 {
+                            return Ok(bytes);
+                        }
+                        if bytes
+                            .len()
+                            .checked_add(count)
+                            .is_none_or(|size| size > MAX_CAPTURE_BYTES)
+                        {
+                            return Err(Error::Limit);
+                        }
+                        bytes.extend_from_slice(&chunk[..count]);
+                    }
+                })();
+                let _ = sender.send(result);
+            })
+            .map_err(|_| Error::Io)?;
+        Some((thread, receiver))
+    } else {
+        None
+    };
+    let mut captured = None;
+    let result = loop {
+        if let Err(error) = control.check() {
+            break Err(error);
+        }
+        if let Some((_, receiver)) = &reader {
+            match receiver.try_recv() {
+                Ok(value) => {
+                    let error = value.as_ref().err().copied();
+                    captured = Some(value);
+                    if let Some(error) = error {
+                        break Err(error);
+                    }
+                }
+                Err(mpsc::TryRecvError::Disconnected) if captured.is_none() => {
+                    break Err(Error::Io);
+                }
+                _ => {}
+            }
+        }
+        match child.inner.try_wait() {
+            Ok(Some(exited)) => break status(exited),
+            Ok(None) => thread::sleep(if started.elapsed() < Duration::from_secs(1) {
+                FAST_POLL
+            } else {
+                POLL
+            }),
+            Err(_) => break Err(Error::Io),
+        }
+    };
+    // Even a successful leader can leave a descendant holding stdout open.
+    // Terminate the owned group before draining; wait() reaps our direct child.
+    let stopped = child.stop();
+    let capture_result = if let Some((reader, receiver)) = reader {
+        let drain_until = Instant::now() + DRAIN;
+        while !reader.is_finished() && Instant::now() < drain_until {
+            thread::sleep(Duration::from_millis(1));
+        }
+        if !reader.is_finished() {
+            Err(Error::Io)
+        } else {
+            reader.join().map_err(|_| Error::Io)?;
+            match captured {
+                Some(value) => value,
+                None => receiver.try_recv().map_err(|_| Error::Io)?,
+            }
+        }
+    } else {
+        Ok(Vec::new())
+    };
+    stopped?;
+    if matches!(result, Err(Error::Cancelled | Error::Deadline)) {
+        return result.map(|_| Vec::new());
+    }
+    let bytes = capture_result?;
+    result?;
+    control.check()?;
+    Ok(bytes)
+}
