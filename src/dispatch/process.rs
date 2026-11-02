@@ -160,7 +160,14 @@ pub(super) fn execute(
                 _ => {}
             }
         }
-        match child.inner.try_wait() {
+        // This runner installs exactly one Windows wrapper: JobObject. Poll
+        // its direct child without consuming completion-port notifications;
+        // JobObject::wait must still receive them during group cleanup.
+        #[cfg(windows)]
+        let exited = child.inner.inner_mut().try_wait();
+        #[cfg(not(windows))]
+        let exited = child.inner.try_wait();
+        match exited {
             Ok(Some(exited)) => break status(exited),
             Ok(None) => thread::sleep(if started.elapsed() < Duration::from_secs(1) {
                 FAST_POLL

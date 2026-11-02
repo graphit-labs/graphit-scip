@@ -807,3 +807,25 @@ fn real_ruby_gemspec_and_php_vendor_api_receive_literal_paths() {
         scip::types::Index::parse_from_bytes(&fs::read(&f.settings.output).unwrap()).unwrap();
     assert_eq!(index.documents[0].relative_path, "fixture.x");
 }
+
+#[cfg(windows)]
+#[test]
+fn completed_windows_jobs_do_not_consume_cleanup_notifications_while_polling() {
+    let f = Fixture::new(Family::Go);
+    // Ensure the leader is polled repeatedly before its ordinary successful exit.
+    f.mode("scip-go", "sleep=80");
+    let (sender, receiver) = std::sync::mpsc::channel();
+    let worker = thread::spawn(move || {
+        let result = (0..3).try_for_each(|_| f.run());
+        let _ = sender.send(result);
+    });
+    // A regression in JobObject completion consumption blocks cleanup even
+    // though the leader exited. Keep that regression bounded in this test.
+    assert_eq!(
+        receiver
+            .recv_timeout(Duration::from_secs(5))
+            .expect("completed job blocked waiting for an already consumed notification"),
+        Ok(())
+    );
+    worker.join().unwrap();
+}
