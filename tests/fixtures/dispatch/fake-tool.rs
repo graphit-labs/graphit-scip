@@ -53,8 +53,8 @@ fn main() {
     }
     if tool == "python3" && args.get(1).map(String::as_str) == Some("-c") { print!("0.0.0\n"); return; }
     if tool == "python3" && args.get(1).map(String::as_str) == Some("-m") {
-        let bin = PathBuf::from(&args[3]).join("bin"); fs::create_dir_all(&bin).unwrap();
-        for name in ["python3", "pip"] { fs::copy(env::current_exe().unwrap(), bin.join(format!("{name}{}", env::consts::EXE_SUFFIX))).unwrap(); }
+        let bin = PathBuf::from(&args[3]).join(if cfg!(windows) { "Scripts" } else { "bin" }); fs::create_dir_all(&bin).unwrap();
+        for name in [if cfg!(windows) { "python" } else { "python3" }, "pip"] { fs::copy(env::current_exe().unwrap(), bin.join(format!("{name}{}", env::consts::EXE_SUFFIX))).unwrap(); }
         return;
     }
     if tool == "cmake" {

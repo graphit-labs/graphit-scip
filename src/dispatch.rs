@@ -467,7 +467,11 @@ fn python_path(cache: &Path, path: &OsStr, limit: usize) -> Result<OsString, Err
     if limit == 0 {
         return Err(Error::Limit);
     }
-    let bin = cache.join("venv/bin");
+    let bin = cache.join(if cfg!(windows) {
+        "venv/Scripts"
+    } else {
+        "venv/bin"
+    });
     let mut size = 0usize;
     for (index, part) in std::iter::once(bin.clone())
         .chain(std::env::split_paths(path))
@@ -629,7 +633,12 @@ pub fn run(settings: &Settings, control: &Control) -> Result<(), Error> {
             runner.cache_env("npm_config_cache", "npm");
             runner.cache_env("PIP_CACHE_DIR", "pip");
             let venv = settings.cache.join("venv");
-            if !executable(&venv.join("bin/python3"))? {
+            let python = venv.join(if cfg!(windows) {
+                "Scripts/python.exe"
+            } else {
+                "bin/python3"
+            });
+            if !executable(&python)? {
                 let mut command = runner.command("python3");
                 command.args(["-m", "venv"]).arg(&venv);
                 runner.run(command)?;
@@ -861,7 +870,7 @@ mod tests {
         let value = python_path(cache, OsStr::new(r"C:\tools"), MAX_PATH_BYTES).unwrap();
         assert_eq!(
             std::env::split_paths(&value).next().unwrap(),
-            cache.join("venv/bin")
+            cache.join("venv/Scripts")
         );
         assert_eq!(
             python_path(

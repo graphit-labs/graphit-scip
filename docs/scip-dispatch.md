@@ -96,7 +96,9 @@ Preflight prepares TypeScript JSON only when it must be generated, and Java
 Maven options only for that family. Their required UTF-8 conversions complete
 before any output removal or child/cache writes. Native opaque paths remain
 accepted by branches that pass OS paths directly through argv or environment.
-Python serializes its venv-bin plus inherited PATH using the standard OS
+Python uses `venv/bin/python3` on Unix and `venv/Scripts/python.exe` on Windows;
+the corresponding executable directory is prepended to its child PATH. It
+serializes that directory plus inherited PATH using the standard OS
 split/join APIs and admits the complete serialized value to the 128 KiB cap
 before output removal or venv creation. Invalid platform quoting/separators
 fail as configuration errors. Rejected configurations preserve previous output
@@ -123,7 +125,9 @@ Upstream indexers, RubyGems and PHP runtime APIs remain vendor dependencies.
 | 130 / 124 | Cooperative cancellation / whole-sequence deadline |
 | Upstream numeric status | Vendor failure; Unix signals map to 128 + signal |
 
-Own diagnostics are fixed messages and do not echo rejected values. Vendors
+Own diagnostics do not echo rejected values, commands, paths or credentials.
+Process failures identify the operation, OS error kind and numeric OS error.
+Vendors
 retain their own diagnostics. PATH belongs to each Settings instance; Python
 extends only its children's PATH. Proxies and vendor credentials remain
 inherited as before.
@@ -135,6 +139,12 @@ TOML uses its vendor recursion guard of 80; the unbounded feature is disabled.
 The TOML parser can allocate transient parsing data within admitted input;
 version fields are checked before cloning into retained metadata. These are
 logical admission limits, not hard RSS/CPU/disk/network quotas on vendors.
+Native OS invocation limits also apply. In particular, Windows limits a complete
+command line to 32,767 UTF-16 code units, including executable, quoting, flags and
+paths. A field below the metadata cap can therefore still exceed that total;
+the dispatcher reports the native size failure as exit 2, rather than ignoring
+the value or attempting to run a different command. Use shorter metadata or
+paths when this limit is reached. The container images execute on Linux.
 
 `GRAPHIT_SCIP_TIMEOUT_MS`, when present, must be a positive u64 milliseconds
 value. The deadline starts once, covering dependency installs, build setup,

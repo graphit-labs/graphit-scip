@@ -173,7 +173,10 @@ fn all_ten_journeys_execute_real_tools_with_isolated_paths() {
         assert_eq!(last["tool"], tool);
         assert!(args(last).starts_with(&expected));
         for call in calls {
-            assert_eq!(call["cwd"], f.settings.workspace.to_str().unwrap());
+            assert_eq!(
+                fs::canonicalize(call["cwd"].as_str().unwrap()).unwrap(),
+                fs::canonicalize(&f.settings.workspace).unwrap()
+            );
             assert!(
                 call["env"]["PATH"]
                     .as_str()
@@ -298,7 +301,10 @@ fn clang_priority_filter_and_dotnet_sorted_restore_failure() {
         }
         f.run().unwrap();
         let calls = f.calls();
-        assert!(args(calls.last().unwrap())[0].ends_with(compdb));
+        let selected = args(calls.last().unwrap())[0]
+            .strip_prefix("--compdb-path=")
+            .unwrap();
+        assert!(Path::new(selected).ends_with(compdb));
     }
     let mut f = Fixture::new(Family::Clang);
     f.input("compile_commands.json", "[]");
@@ -389,7 +395,10 @@ fn dotnet_indexes_nested_projects_once_from_the_workspace_root() {
     );
     assert_eq!(&args(calls.last().unwrap())[4..], selected);
     for call in calls {
-        assert_eq!(call["cwd"], f.settings.workspace.to_str().unwrap());
+        assert_eq!(
+            fs::canonicalize(call["cwd"].as_str().unwrap()).unwrap(),
+            fs::canonicalize(&f.settings.workspace).unwrap()
+        );
         assert_eq!(
             call["env"]["DOTNET_CLI_HOME"],
             f.settings.cache.join("dotnet").to_str().unwrap()
@@ -750,7 +759,12 @@ fn captured_metadata_and_toml_exact_and_one_under_boundaries() {
             "1".repeat(dispatch::MAX_METADATA_BYTES)
         ),
     );
+    #[cfg(not(windows))]
     f.run().unwrap();
+    // The accepted metadata alone exceeds Windows' complete command-line
+    // capacity once flags and paths are included. Surface the native limit.
+    #[cfg(windows)]
+    assert_eq!(f.run(), Err(Error::Limit));
     f.input(
         "pyproject.toml",
         &format!(

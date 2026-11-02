@@ -21,7 +21,26 @@ impl OwnedChild {
         if self.stopped {
             return Ok(());
         }
-        if let Err(error) = self.inner.start_kill() {
+        let terminated = self.inner.start_kill();
+        // Darwin can return EPERM when a process group contains only its
+        // unreaped leader (XNU killpg1 excludes zombies). Reap that child and
+        // retry the group signal: only ESRCH is accepted as an empty group;
+        // a real permission failure with surviving members remains an error.
+        #[cfg(target_os = "macos")]
+        let terminated = if terminated
+            .as_ref()
+            .is_err_and(|error| error.raw_os_error() == Some(nix::errno::Errno::EPERM as i32))
+            && self
+                .inner
+                .try_wait()
+                .map_err(|error| io_error("reap exited process", &error))?
+                .is_some()
+        {
+            self.inner.start_kill()
+        } else {
+            terminated
+        };
+        if let Err(error) = terminated {
             #[cfg(unix)]
             if error.raw_os_error() != Some(nix::errno::Errno::ESRCH as i32) {
                 return Err(io_error("terminate process group", &error));
@@ -89,10 +108,18 @@ fn spawn(command: Command, capture: bool) -> Result<OwnedChild, Error> {
             inner,
             stopped: false,
         })
-        .map_err(|error| match error.kind() {
-            std::io::ErrorKind::NotFound => Error::MissingTool,
-            std::io::ErrorKind::PermissionDenied => Error::DeniedTool,
-            _ => io_error("spawn", &error),
+        .map_err(|error| {
+            // CreateProcess rejects command lines beyond its native UTF-16
+            // bound even when each individual metadata field was admitted.
+            #[cfg(windows)]
+            if error.raw_os_error() == Some(206) {
+                return Error::Limit;
+            }
+            match error.kind() {
+                std::io::ErrorKind::NotFound => Error::MissingTool,
+                std::io::ErrorKind::PermissionDenied => Error::DeniedTool,
+                _ => io_error("spawn", &error),
+            }
         })
 }
 
