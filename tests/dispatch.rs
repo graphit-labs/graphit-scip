@@ -534,7 +534,12 @@ fn upstream_failure_missing_denied_empty_and_output_cleanup() {
         assert_eq!(f.run(), Err(error));
     }
     let f = Fixture::new(Family::Go);
-    fs::remove_file(f.root.join("bin/scip-go")).unwrap();
+    fs::remove_file(
+        f.root
+            .join("bin")
+            .join(format!("scip-go{}", std::env::consts::EXE_SUFFIX)),
+    )
+    .unwrap();
     assert_eq!(f.run(), Err(Error::MissingTool));
     #[cfg(unix)]
     {

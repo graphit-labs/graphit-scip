@@ -14,20 +14,22 @@ fn main() {
     if args.get(1).map(String::as_str) == Some("--fixture-install") {
         let source = env::current_exe().unwrap();
         let directory = PathBuf::from(&args[2]);
-        for name in &args[3..] { fs::copy(&source, directory.join(name)).unwrap(); }
+        for name in &args[3..] { fs::copy(&source, directory.join(format!("{name}{}", env::consts::EXE_SUFFIX))).unwrap(); }
         return;
     }
     if args.get(1).map(String::as_str) == Some("--fixture-descendant") {
         let pidfile = args.get(2).unwrap(); fs::write(pidfile, std::process::id().to_string()).unwrap();
         loop { thread::sleep(Duration::from_secs(60)); }
     }
-    let tool = PathBuf::from(&args[0]).file_name().unwrap().to_string_lossy().into_owned();
+    let invocation = PathBuf::from(&args[0]);
+    let filename = invocation.file_name().unwrap().to_str().unwrap();
+    let tool = filename.strip_suffix(env::consts::EXE_SUFFIX).unwrap_or(filename);
     let executable = env::current_exe().unwrap();
     let root = executable.ancestors().find(|ancestor| ancestor.join("bin/.fixture-root").is_file()).map(|ancestor| ancestor.join("bin")).unwrap_or_else(|| executable.parent().unwrap().to_owned());
     let options = fs::read_to_string(root.join(format!("{tool}.mode"))).unwrap_or_default();
     let option = |name: &str| options.lines().find_map(|line| line.strip_prefix(&format!("{name}=")));
     let keys = ["PATH", "GOPATH", "GOCACHE", "npm_config_cache", "COREPACK_HOME", "PIP_CACHE_DIR", "MAVEN_OPTS", "GRADLE_USER_HOME", "GRAPHIT_SCIP_HOST_ROOT", "DOTNET_CLI_HOME", "NUGET_PACKAGES", "CARGO_HOME", "CARGO_TARGET_DIR", "RUSTUP_HOME", "BUNDLE_PATH", "BUNDLE_APP_CONFIG", "BUNDLE_GEMFILE", "GRAPHIT_SCIP_SOURCE_GEMFILE", "PUB_CACHE", "COMPOSER_HOME", "COMPOSER_CACHE_DIR"];
-    let record = format!("{{\"tool\":{},\"args\":[{}],\"cwd\":{},\"env\":{{{}}}}}\n", quote(&tool), args[1..].iter().map(|value| quote(value)).collect::<Vec<_>>().join(","), quote(&env::current_dir().unwrap().to_string_lossy()), keys.iter().filter_map(|key| env::var(key).ok().map(|value| format!("{}:{}", quote(key), quote(&value)))).collect::<Vec<_>>().join(","));
+    let record = format!("{{\"tool\":{},\"args\":[{}],\"cwd\":{},\"env\":{{{}}}}}\n", quote(tool), args[1..].iter().map(|value| quote(value)).collect::<Vec<_>>().join(","), quote(&env::current_dir().unwrap().to_string_lossy()), keys.iter().filter_map(|key| env::var(key).ok().map(|value| format!("{}:{}", quote(key), quote(&value)))).collect::<Vec<_>>().join(","));
     fs::OpenOptions::new().create(true).append(true).open(root.join("calls.jsonl")).unwrap().write_all(record.as_bytes()).unwrap();
     if let Some(pidfile) = option("descendant") {
         Command::new(env::current_exe().unwrap()).args(["--fixture-descendant", pidfile]).spawn().unwrap();
@@ -52,7 +54,7 @@ fn main() {
     if tool == "python3" && args.get(1).map(String::as_str) == Some("-c") { print!("0.0.0\n"); return; }
     if tool == "python3" && args.get(1).map(String::as_str) == Some("-m") {
         let bin = PathBuf::from(&args[3]).join("bin"); fs::create_dir_all(&bin).unwrap();
-        for name in ["python3", "pip"] { fs::copy(env::current_exe().unwrap(), bin.join(name)).unwrap(); }
+        for name in ["python3", "pip"] { fs::copy(env::current_exe().unwrap(), bin.join(format!("{name}{}", env::consts::EXE_SUFFIX))).unwrap(); }
         return;
     }
     if tool == "cmake" {
