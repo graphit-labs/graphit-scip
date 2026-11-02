@@ -24,12 +24,14 @@ impl OwnedChild {
         if let Err(error) = self.inner.start_kill() {
             #[cfg(unix)]
             if error.raw_os_error() != Some(nix::errno::Errno::ESRCH as i32) {
-                return Err(Error::Io);
+                return Err(io_error("terminate process group", &error));
             }
             #[cfg(not(unix))]
-            return Err(Error::Io);
+            return Err(io_error("terminate process job", &error));
         }
-        self.inner.wait().map_err(|_| Error::Io)?;
+        self.inner
+            .wait()
+            .map_err(|error| io_error("reap process", &error))?;
         self.stopped = true;
         Ok(())
     }
@@ -38,6 +40,17 @@ impl Drop for OwnedChild {
     fn drop(&mut self) {
         let _ = self.stop();
     }
+}
+
+// Report the failing operation and OS classification without exposing command,
+// arguments, paths, environment or captured metadata.
+fn io_error(operation: &str, error: &std::io::Error) -> Error {
+    eprintln!(
+        "SCIP process {operation} failed: {:?} (OS error {:?})",
+        error.kind(),
+        error.raw_os_error()
+    );
+    Error::Io
 }
 
 fn status(status: ExitStatus) -> Result<(), Error> {
@@ -79,7 +92,7 @@ fn spawn(command: Command, capture: bool) -> Result<OwnedChild, Error> {
         .map_err(|error| match error.kind() {
             std::io::ErrorKind::NotFound => Error::MissingTool,
             std::io::ErrorKind::PermissionDenied => Error::DeniedTool,
-            _ => Error::Io,
+            _ => io_error("spawn", &error),
         })
 }
 
@@ -104,7 +117,9 @@ pub(super) fn execute(
                         .map_err(|_| Error::Limit)?;
                     let mut chunk = [0u8; 4096];
                     loop {
-                        let count = stdout.read(&mut chunk).map_err(|_| Error::Io)?;
+                        let count = stdout
+                            .read(&mut chunk)
+                            .map_err(|error| io_error("read metadata", &error))?;
                         if count == 0 {
                             return Ok(bytes);
                         }
@@ -152,7 +167,7 @@ pub(super) fn execute(
             } else {
                 POLL
             }),
-            Err(_) => break Err(Error::Io),
+            Err(error) => break Err(io_error("poll process", &error)),
         }
     };
     // Even a successful leader can leave a descendant holding stdout open.

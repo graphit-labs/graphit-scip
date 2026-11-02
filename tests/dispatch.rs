@@ -49,6 +49,8 @@ impl Fixture {
             NEXT.fetch_add(1, Ordering::Relaxed)
         ));
         fs::create_dir(&root).unwrap();
+        // macOS temp_dir may use /var while subprocess cwd resolves /private/var.
+        let root = fs::canonicalize(root).unwrap();
         for name in ["workspace", "cache", "output", "bin"] {
             fs::create_dir(root.join(name)).unwrap();
         }
@@ -547,7 +549,7 @@ fn upstream_failure_missing_denied_empty_and_output_cleanup() {
     }
 }
 
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 #[test]
 fn branch_required_unicode_conversions_precede_every_output_or_child_effect() {
     use std::{ffi::OsString, os::unix::ffi::OsStringExt};
@@ -754,7 +756,9 @@ fn captured_metadata_and_toml_exact_and_one_under_boundaries() {
     assert_eq!(f.run(), Err(Error::Limit));
 }
 
-#[cfg(unix)]
+// Production images provide these Linux runtime paths; orchestration remains
+// covered by the portable subprocess fixtures on Windows and macOS.
+#[cfg(target_os = "linux")]
 #[test]
 fn real_ruby_gemspec_and_php_vendor_api_receive_literal_paths() {
     use std::os::unix::fs::symlink;
