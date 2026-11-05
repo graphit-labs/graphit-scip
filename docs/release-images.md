@@ -99,19 +99,16 @@ maintained upstream code.
 Run focused checks with:
 
 ```sh
-cargo test --locked --test release
+cargo test --locked --offline --test release
 actionlint .github/workflows/release-images.yml
 ```
 
-`tests/release.rs` executes the real binary, checks SemVer/family/count/output
-boundaries, injection, symlinks, hardlink aliases, unchanged output on failure,
-sorted discovery and workflow producer/consumer wiring. The active hook fixture
-copies the workflow and maintained image Dockerfiles so these tests run in its
-isolated checkout. Validate changed producers and their affected image consumers;
-unchanged families retain their existing evidence. Local qualification does not
-execute login, release or push steps. Native Windows/macOS execution and real
-publication require their corresponding execution before being claimed.
+The offline Rust tests exercise the real release metadata binary in temporary
+directories. They cover SemVer, family discovery and ordering, output limits,
+injection, link aliases, unchanged output on failure, and workflow wiring.
+Prepare the locked sources with `cargo fetch --locked`.
 
-`tests/release.rs` exercises release discovery, tags, semantic versions,
-resource bounds and workflow consumers. Generated measurements and execution
-logs are temporary outputs, not maintained test fixtures.
+The tagged release requires the standard Rust workflow, clang image
+qualification, and metadata generation before its build and publish jobs.
+Run the [image qualification workflow](../.github/workflows/qualification.yml)
+manually when checking Docker behavior without publishing.

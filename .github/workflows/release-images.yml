@@ -16,6 +16,9 @@ jobs:
   validation:
     uses: ./.github/workflows/rust.yml
 
+  qualification:
+    uses: ./.github/workflows/qualification.yml
+
   version:
     runs-on: ubuntu-latest
     outputs:
@@ -30,7 +33,7 @@ jobs:
         run: cargo run --locked --release --bin release-metadata
 
   images:
-    needs: [validation, version]
+    needs: [validation, qualification, version]
     runs-on: ubuntu-latest
     permissions:
       contents: read

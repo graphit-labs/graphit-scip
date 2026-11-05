@@ -3,88 +3,79 @@ use protobuf::Message;
 use serde_json::Value;
 use std::{
     fs,
+    hash::{DefaultHasher, Hash, Hasher},
     path::{Path, PathBuf},
     process::Command,
-    sync::{
-        OnceLock,
-        atomic::{AtomicU64, Ordering},
-    },
+    sync::{OnceLock, atomic::Ordering},
     thread,
     time::{Duration, Instant},
 };
 
-static NEXT: AtomicU64 = AtomicU64::new(0);
 static FAKE: OnceLock<PathBuf> = OnceLock::new();
 fn fake() -> &'static Path {
     FAKE.get_or_init(|| {
-        let root =
-            std::env::temp_dir().join(format!("graphit-dispatch-tools-{}", std::process::id()));
-        fs::create_dir_all(&root).unwrap();
-        let binary = root.join(format!("fake{}", std::env::consts::EXE_SUFFIX));
-        assert!(
-            Command::new("rustc")
-                .args(["--edition=2024", "-O"])
-                .arg(
-                    Path::new(env!("CARGO_MANIFEST_DIR"))
-                        .join("tests/fixtures/dispatch/fake-tool.rs")
-                )
-                .arg("-o")
-                .arg(&binary)
-                .status()
-                .unwrap()
-                .success()
+        const SOURCE: &str = include_str!("fixtures/dispatch/fake-tool.rs");
+        let mut key = DefaultHasher::new();
+        (
+            SOURCE,
+            include_str!("../rust-toolchain.toml"),
+            std::env::consts::OS,
+            std::env::consts::ARCH,
+        )
+            .hash(&mut key);
+        let target = Path::new(env!("CARGO_TARGET_TMPDIR"));
+        let filename = format!(
+            "scip-test-tool-{:016x}{}",
+            key.finish(),
+            std::env::consts::EXE_SUFFIX
         );
+        let binary = target.join(&filename);
+        if binary.is_file() {
+            return binary;
+        }
+        fs::create_dir_all(target).unwrap();
+        let staged = tempfile::tempdir_in(target).unwrap();
+        let source = staged.path().join("fake_tool.rs");
+        let output = staged.path().join(filename);
+        fs::write(&source, SOURCE).unwrap();
+        let compiled = Command::new("rustc")
+            .args(["--edition=2024", "-O", "-C", "strip=symbols"])
+            .arg(source)
+            .arg("-o")
+            .arg(&output)
+            .output()
+            .unwrap();
+        assert!(
+            compiled.status.success(),
+            "{}",
+            String::from_utf8_lossy(&compiled.stderr)
+        );
+        if let Err(error) = fs::rename(output, &binary) {
+            assert!(
+                binary.is_file(),
+                "could not publish fixture executable: {error}"
+            );
+        }
         binary
     })
 }
 struct Fixture {
+    _temp: tempfile::TempDir,
     root: PathBuf,
     settings: Settings,
 }
 impl Fixture {
     fn new(family: Family) -> Self {
-        let root = std::env::temp_dir().join(format!(
-            "graphit-dispatch-{}-{}-ação '#{{literal}}",
-            std::process::id(),
-            NEXT.fetch_add(1, Ordering::Relaxed)
-        ));
-        fs::create_dir(&root).unwrap();
+        let temp = tempfile::Builder::new()
+            .prefix("graphit-dispatch-ação '#{literal}-")
+            .tempdir()
+            .unwrap();
         // macOS temp_dir may use /var while subprocess cwd resolves /private/var.
-        let root = fs::canonicalize(root).unwrap();
+        let root = fs::canonicalize(temp.path()).unwrap();
         for name in ["workspace", "cache", "output", "bin"] {
             fs::create_dir(root.join(name)).unwrap();
         }
         fs::write(root.join("bin/.fixture-root"), "").unwrap();
-        let tools = [
-            "scip-go",
-            "scip-typescript",
-            "python3",
-            "pip",
-            "scip-python",
-            "scip-java",
-            "cmake",
-            "graphit-filter-clang-compdb",
-            "scip-clang",
-            "dotnet",
-            "scip-dotnet",
-            "rust-analyzer",
-            "bundle",
-            "ruby",
-            "dart",
-            "php",
-        ];
-        // Copy in a child: concurrent forks in this test process must not
-        // inherit executable write descriptors (Linux ETXTBSY). Keep separate
-        // files, since the production tool validator correctly rejects aliases.
-        assert!(
-            Command::new(fake())
-                .arg("--fixture-install")
-                .arg(root.join("bin"))
-                .args(tools)
-                .status()
-                .unwrap()
-                .success()
-        );
         let settings = Settings {
             family,
             workspace: root.join("workspace"),
@@ -95,7 +86,37 @@ impl Fixture {
             project_name: "fixture ação \"name\"".into(),
             php_autoload: root.join("autoload.php"),
         };
-        Self { root, settings }
+        let fixture = Self {
+            _temp: temp,
+            root,
+            settings,
+        };
+        fixture.install_tools(match family {
+            Family::Go => &["scip-go"],
+            Family::TypeScript => &["scip-typescript"],
+            Family::Python => &["python3", "pip", "scip-python"],
+            Family::Java => &["scip-java"],
+            Family::Clang => &["cmake", "graphit-filter-clang-compdb", "scip-clang"],
+            Family::Dotnet => &["dotnet", "scip-dotnet"],
+            Family::Rust => &["rust-analyzer"],
+            Family::Ruby => &["bundle", "ruby"],
+            Family::Dart => &["dart"],
+            Family::Php => &["php"],
+        });
+        fixture
+    }
+    fn install_tools(&self, tools: &[&str]) {
+        // Separate inodes are required by the product's executable identity check.
+        // Copy in a child so parallel forks do not retain writable handles (ETXTBSY).
+        assert!(
+            Command::new(fake())
+                .arg("--fixture-install")
+                .arg(self.root.join("bin"))
+                .args(tools)
+                .status()
+                .unwrap()
+                .success()
+        );
     }
     fn input(&self, name: &str, body: &str) {
         let path = self.settings.workspace.join(name);
@@ -114,11 +135,6 @@ impl Fixture {
     }
     fn run(&self) -> Result<(), Error> {
         dispatch::run(&self.settings, &Control::default())
-    }
-}
-impl Drop for Fixture {
-    fn drop(&mut self) {
-        let _ = fs::remove_dir_all(&self.root);
     }
 }
 fn args(call: &Value) -> Vec<&str> {
@@ -582,6 +598,7 @@ fn branch_required_unicode_conversions_precede_every_output_or_child_effect() {
         assert_eq!(fs::read(&f.settings.output).unwrap(), b"previous-index");
         assert!(f.calls().is_empty());
         // An opaque native path remains accepted when that family/branch uses argv.
+        f.install_tools(&["scip-go"]);
         f.settings.family = Family::Go;
         f.run().unwrap();
         if family == Family::TypeScript {
@@ -625,7 +642,7 @@ fn composed_python_path_and_join_errors_are_rejected_before_cache_output_or_chil
 }
 
 #[test]
-fn cancellation_whole_deadline_and_concurrent_environment_isolation() {
+fn whole_deadline_covers_multiple_commands() {
     let f = Fixture::new(Family::Dart);
     // Each command fits the budget, but both together exceed it. Leave enough
     // launch margin for parallel tests while retaining the 3s cleanup bound.
@@ -635,16 +652,32 @@ fn cancellation_whole_deadline_and_concurrent_environment_isolation() {
     assert_eq!(dispatch::run(&f.settings, &control), Err(Error::Deadline));
     assert!(start.elapsed() < Duration::from_secs(3));
     assert_eq!(f.calls().len(), 2);
+}
+
+#[test]
+fn cancellation_interrupts_a_started_tool() {
     let f = Fixture::new(Family::Go);
-    f.mode("scip-go", "sleep=10000");
+    f.mode("scip-go", "hold=true");
     let control = Control::default();
-    let cancelled = control.cancelled.clone();
-    let cancel = thread::spawn(move || {
-        thread::sleep(Duration::from_millis(60));
-        cancelled.store(true, Ordering::Relaxed);
+    thread::scope(|scope| {
+        let worker = scope.spawn(|| dispatch::run(&f.settings, &control));
+        let ready = f.root.join("bin/hold-ready");
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while !ready.exists() && Instant::now() < deadline {
+            thread::sleep(Duration::from_millis(2));
+        }
+        control.cancelled.store(true, Ordering::Relaxed);
+        assert_eq!(worker.join().unwrap(), Err(Error::Cancelled));
+        assert!(ready.exists(), "fixture tool never started");
+        let calls = f.calls();
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0]["tool"], "scip-go");
     });
-    assert_eq!(dispatch::run(&f.settings, &control), Err(Error::Cancelled));
-    cancel.join().unwrap();
+    assert!(!f.settings.output.exists());
+}
+
+#[test]
+fn concurrent_dispatches_keep_environment_isolated() {
     let first = Fixture::new(Family::Go);
     let second = Fixture::new(Family::Go);
     thread::scope(|scope| {
@@ -675,6 +708,22 @@ fn leader_exit_with_descendant_pipe_and_metadata_overflow_are_bounded() {
         assert_eq!(
             stat.split(')').nth(1).unwrap().trim().chars().next(),
             Some('Z')
+        );
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let state = Command::new("/bin/ps")
+            .args(["-p", &pid.to_string(), "-o", "stat="])
+            .output()
+            .unwrap();
+        assert!(
+            state.status.success() || (state.status.code() == Some(1) && state.stderr.is_empty()),
+            "could not inspect descendant {pid}: {state:?}"
+        );
+        let state = String::from_utf8(state.stdout).unwrap();
+        assert!(
+            state.trim().is_empty() || state.trim().starts_with('Z'),
+            "descendant {pid} is still running: {state}"
         );
     }
     let f = Fixture::new(Family::Ruby);
@@ -779,6 +828,7 @@ fn captured_metadata_and_toml_exact_and_one_under_boundaries() {
 // covered by the portable subprocess fixtures on Windows and macOS.
 #[cfg(target_os = "linux")]
 #[test]
+#[ignore = "native adapter qualification requires installed Linux Ruby/Bundler and PHP"]
 fn real_ruby_gemspec_and_php_vendor_api_receive_literal_paths() {
     use std::os::unix::fs::symlink;
     let f = Fixture::new(Family::Ruby);

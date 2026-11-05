@@ -1,0 +1,19 @@
+name: Qualify SCIP images
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  clang-image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.98.0
+      - name: Fetch locked Rust dependencies
+        run: cargo fetch --locked
+      - name: Build and exercise the clang image
+        run: cargo run --locked --offline --bin xtask -- docker-smoke

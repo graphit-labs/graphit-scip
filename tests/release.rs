@@ -310,7 +310,8 @@ fn maintained_repository_matrix_and_workflow_consumers_match() {
     let workflow = include_str!("../.github/workflows/release-images.yml");
     for consumer in [
         "uses: ./.github/workflows/rust.yml",
-        "needs: [validation, version]",
+        "uses: ./.github/workflows/qualification.yml",
+        "needs: [validation, qualification, version]",
         "cargo run --locked --release --bin release-metadata",
         "steps.release.outputs.matrix",
         "steps.release.outputs.tags",

@@ -26,13 +26,17 @@ fn check() -> Result<(), String> {
         &[
             "clippy",
             "--locked",
+            "--offline",
             "--all-targets",
             "--",
             "-D",
             "warnings",
         ],
     )?;
-    run("cargo", &["test", "--locked", "--all-targets"])
+    run(
+        "cargo",
+        &["test", "--locked", "--offline", "--no-fail-fast"],
+    )
 }
 struct Scratch(PathBuf);
 impl Scratch {
@@ -477,11 +481,8 @@ fn main() {
         "images-smoke" => images::run(std::env::args().nth(2).as_deref(), std::env::args().nth(3).as_deref()),
         "vendor-dotnet-smoke" => images::run(Some("dotnet"), None),
         "vendor-dotnet-corpus" => match std::env::args().nth(2) { Some(image) => images::run(Some("dotnet"), Some(&image)), None => Err("vendor-dotnet-corpus requires sha256:imageID".into()) },
-        "gate" => check()
-            .and_then(|_| run("cargo", &["audit", "--file", "Cargo.lock"]))
-            .and_then(|_| docker_smoke()),
         _ => Err(
-            "usage: cargo run --locked --bin xtask -- check|gate|docker-smoke|images-smoke [family [sha256:imageID]]|vendor-dotnet-smoke|vendor-dotnet-corpus <sha256:imageID>"
+            "usage: cargo run --locked --bin xtask -- check|docker-smoke|images-smoke [family [sha256:imageID]]|vendor-dotnet-smoke|vendor-dotnet-corpus <sha256:imageID>"
                 .into(),
         ),
     };

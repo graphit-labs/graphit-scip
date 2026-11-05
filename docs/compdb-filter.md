@@ -124,14 +124,15 @@ Host-format fixtures on Linux do not establish native Windows/macOS behavior.
 The active Git hooks use `core.hooksPath=.githooks`. Install the checked-in hooks
 on a new checkout with `git config core.hooksPath .githooks`.
 
-| Invocation | Purpose |
-| --- | --- |
-| `cargo run --locked --bin xtask -- check` | Fast format, Clippy with warnings denied, and focused Rust contracts; pre-commit. |
-| `cargo run --locked --bin xtask -- gate` | Fast checks, dependency audit, and real clang image build/index smoke; pre-push. |
-| `cargo run --locked --bin xtask -- docker-smoke` | Builds linux/amd64 clang, runs the Rust filter and scip-clang, verifies selected documents, a physical `Straße.cpp` selected from Windows command metadata, and source immutability. |
+After `cargo fetch --locked`, the offline pre-push check is
+`cargo run --locked --offline --target host-tuple --bin xtask -- check`.
+Run the focused compile-database contracts with
+`cargo test --locked --offline --test compdb --test cli`.
 
-The gate requires Docker and `cargo-audit` on PATH. CI runs the contract invocation
-on three operating systems and the image smoke on Linux. Configured CI does not
-mean those native runners have executed. Docker smoke here uses a direct read-only
-workspace mount; OverlayFS, capability transitions and the ten-family ecosystem
-qualification remain with their owning integration work.
+The separate clang qualification uses
+`cargo run --locked --offline --bin xtask -- docker-smoke`. It builds the
+Linux amd64 image and checks the real clang producer, document selection,
+the Unicode Windows command case-fold fixture, and source immutability.
+The [standard CI](../.github/workflows/rust.yml) runs the offline contracts on
+Linux, Windows and macOS. The [qualification workflow](../.github/workflows/qualification.yml)
+runs the image smoke on Linux before a tagged release or on manual dispatch.

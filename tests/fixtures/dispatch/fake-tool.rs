@@ -31,6 +31,10 @@ fn main() {
     let keys = ["PATH", "GOPATH", "GOCACHE", "npm_config_cache", "COREPACK_HOME", "PIP_CACHE_DIR", "MAVEN_OPTS", "GRADLE_USER_HOME", "GRAPHIT_SCIP_HOST_ROOT", "DOTNET_CLI_HOME", "NUGET_PACKAGES", "CARGO_HOME", "CARGO_TARGET_DIR", "RUSTUP_HOME", "BUNDLE_PATH", "BUNDLE_APP_CONFIG", "BUNDLE_GEMFILE", "GRAPHIT_SCIP_SOURCE_GEMFILE", "PUB_CACHE", "COMPOSER_HOME", "COMPOSER_CACHE_DIR"];
     let record = format!("{{\"tool\":{},\"args\":[{}],\"cwd\":{},\"env\":{{{}}}}}\n", quote(tool), args[1..].iter().map(|value| quote(value)).collect::<Vec<_>>().join(","), quote(&env::current_dir().unwrap().to_string_lossy()), keys.iter().filter_map(|key| env::var(key).ok().map(|value| format!("{}:{}", quote(key), quote(&value)))).collect::<Vec<_>>().join(","));
     fs::OpenOptions::new().create(true).append(true).open(root.join("calls.jsonl")).unwrap().write_all(record.as_bytes()).unwrap();
+    if option("hold") == Some("true") {
+        fs::write(root.join("hold-ready"), "").unwrap();
+        loop { thread::park(); }
+    }
     if let Some(pidfile) = option("descendant") {
         Command::new(env::current_exe().unwrap()).args(["--fixture-descendant", pidfile]).spawn().unwrap();
         while !std::path::Path::new(pidfile).exists() { thread::sleep(Duration::from_millis(1)); }

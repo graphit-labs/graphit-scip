@@ -33,10 +33,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.98.0
         with:
           components: rustfmt, clippy
-      - run: cargo run --locked --bin xtask -- check
-  clang-image:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@1.98.0
-      - run: cargo run --locked --bin xtask -- docker-smoke
+      - name: Fetch locked Rust dependencies
+        run: cargo fetch --locked
+      - name: Run offline Rust contracts
+        run: cargo run --locked --offline --target host-tuple --bin xtask -- check

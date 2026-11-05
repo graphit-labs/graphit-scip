@@ -176,15 +176,30 @@ projects passed cold/warm indexing and official SCIP print/lint/stats. The
 external producer, package attribution and supported SDK behavior are described
 in the [vendor reference](docs/scip-dotnet-vendor.md).
 
-Run `cargo run --locked --bin xtask -- check` for formatting, strict Clippy and
-Rust tests. The pre-commit hook runs staged whitespace, workflow lint and Rust formatting checks.
-Pre-push retains the complete check above and runs the longer
-dependency audit and the clang image smoke test. Other image smoke tests run
-explicitly for the affected family.
+## Development checks
 
-GitHub CI runs the Rust contracts on Linux, Windows and macOS, the clang image
-smoke on Linux, and workflow validation with actionlint 1.7.12 downloaded from
-its official release and verified by SHA-256. The image release calls the same
-CI workflow at the tag's commit; publishing waits for all its jobs and release
-metadata generation to succeed. These workflow definitions do not establish
-that an unpublished local commit has passed hosted CI.
+Prepare the pinned toolchain and locked Cargo sources once, then run the
+standard suite offline.
+
+```sh
+cargo fetch --locked
+cargo run --locked --offline --target host-tuple --bin xtask -- check
+```
+
+The check runs formatting, Clippy, and Rust tests. Tests use private temporary
+directories, the workspace binaries, and synthetic indexer processes. Rust runs
+independent cases in parallel on the available CPUs. Set `RUST_TEST_THREADS` to
+override test concurrency for a local run. `cargo test --locked --offline` runs
+only the tests.
+
+The pre-commit hook checks staged whitespace, workflows and formatting. Pre-push
+runs the offline Rust check. GitHub runs the standard suite on Linux, Windows
+and macOS, with workflow lint as a separate job.
+
+Use the [image qualification workflow](.github/workflows/qualification.yml) or
+`cargo run --locked --offline --bin xtask -- docker-smoke` to check the real clang
+image. Use `images-smoke FAMILY` for another affected family and
+`cargo audit --file Cargo.lock` for a separate dependency audit. Docker and the
+language tools used by those qualifications are unnecessary for the standard
+suite. Tagged releases require both the standard check and clang image
+qualification before publishing.

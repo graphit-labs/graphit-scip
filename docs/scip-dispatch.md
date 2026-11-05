@@ -178,22 +178,28 @@ has been exercised. The entrypoint uses only `std`, so its unit suite can also
 be compiled directly with `rustc --edition=2024 --test src/bin/scip-entrypoint.rs`
 and run from a caller-selected output path.
 
-`CARGO_INCREMENTAL=0 cargo run --locked --bin xtask -- check` runs fmt,
-Clippy and maintained tests. `cargo run --locked --bin xtask -- docker-smoke`
-builds the actual clang consumer and indexes selected C/Unicode C++ sources.
-It also checks fresh OverlayFS, UID/GID and occupied-overlay rejection,
-output/failure/deadline, container PID 1 and actual SIGTERM behavior.
-The maintained dispatcher suite covers product behavior using real fixture
-processes. The `gate` adds dependency audit and the clang smoke to the Rust checks.
-Run additional image smoke tests explicitly for the affected family. Execution logs are disposable test output.
-`cargo audit --file Cargo.lock` and release actionlint remain focused gates
-because Cargo and the shared image build changed. No push is performed.
+After `cargo fetch --locked`, run the offline standard check with
+`cargo run --locked --offline --target host-tuple --bin xtask -- check`.
+For the dispatch suite alone, use `cargo test --locked --offline --test dispatch`.
+Its independent cases exercise the real dispatcher and synthetic processes,
+including command order, cache reuse, argument and environment isolation,
+errors, deadlines, cancellation and descendant-pipe cleanup.
+The subprocess fixture is compiled with the pinned Rust toolchain and cached
+by source, toolchain, OS and architecture beneath Cargo's test temporary root.
+Each dispatch gets its own executable inodes, workspace, cache and output.
+Cancellation waits for the fixture's readiness marker. Descendant cleanup is
+checked through process state on Linux and macOS, accepting a reaped process
+or a terminated zombie. The macOS check uses the operating system's `/bin/ps`.
 
-The dispatch suite uses real fixture processes for ten sequences, priorities,
-cache reuse, argument/environment isolation, output/errors, resource caps,
-whole deadline, cancellation and descendant-pipe cleanup. Semantic RubyGems
-and PHP adapter probes use installed Linux Ruby/PHP; the PHP fixture models
-the vendor API shape and is not qualification of the real PHP image.
+The installed Linux Ruby and PHP adapter test is an explicit qualification:
+`cargo test --locked --offline --test dispatch real_ruby_gemspec_and_php_vendor_api_receive_literal_paths -- --ignored --exact`.
+The PHP fixture models the vendor API shape. Qualify the actual PHP image with
+`cargo run --locked --offline --bin xtask -- images-smoke php`.
+
+The separate `docker-smoke` command builds the clang image and exercises real
+indexing, OverlayFS, ownership, errors, deadlines, PID 1 and SIGTERM. Run image
+qualification for the affected family. Run dependency audit separately with
+`cargo audit --file Cargo.lock`.
 The nine upstream families have retained real Linux amd64 qualifications.
 Native macOS/Windows Job behavior, Docker Desktop and arm64 require their
 actual validations. Documentation conversion,
