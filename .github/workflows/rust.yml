@@ -6,6 +6,8 @@ on:
     branches: [main]
 permissions:
   contents: read
+env:
+  CARGO_INCREMENTAL: 0
 jobs:
   workflows:
     runs-on: ubuntu-latest
@@ -33,7 +35,116 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.98.0
         with:
           components: rustfmt, clippy
+      - name: Select Windows compiler and SDK
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+          vsversion: '2022'
+      - name: Identify compiled cache ABI
+        id: build-context
+        shell: bash
+        run: |
+          host=$(rustc -vV | sed -n 's/^host: //p')
+          test -n "$host"
+          abi=$({
+            set -e
+            rustc -vV
+            printf '%s\n' "${RUNNER_OS:?}" "${RUNNER_ARCH:?}" "${ImageOS:?}" "${ImageVersion:?}"
+            env | LC_ALL=C sort | sed -n -E '/^(CC|CXX|CFLAGS|CPPFLAGS|CXXFLAGS|LDFLAGS|RUSTFLAGS|RUSTDOCFLAGS|RUSTC_WRAPPER|RUSTC_WORKSPACE_WRAPPER|CARGO_ENCODED_RUSTFLAGS|CARGO_BUILD_TARGET|CARGO_INCREMENTAL|CARGO_PROFILE_.*|CMAKE_.*|GGML_.*|LLAMA_.*|LBUG_.*|CUDA.*|CUDNN.*|OPENSSL_.*|PKG_CONFIG.*|LIBCLANG_PATH)=/p'
+            case "$RUNNER_OS" in
+              Linux) cc --version; c++ --version ;;
+              macOS) clang --version; xcrun --show-sdk-version ;;
+              Windows)
+                printf '%s\n' "${VCToolsVersion:?}" "${WindowsSDKVersion:?}" "${UCRTVersion:?}" "${VSCMD_ARG_TGT_ARCH:?}"
+                # CL prints /Bv version information but can return 2 without input files.
+                MSYS_NO_PATHCONV=1 cl /Bv 2>&1 || test "$?" -eq 2
+                ;;
+            esac
+          } | git hash-object --stdin)
+          printf 'host=%s\nabi=%s\n' "$host" "$abi" >> "$GITHUB_OUTPUT"
+      - name: Restore Cargo dependencies
+        id: cargo-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: scip-cargo-v1-${{ runner.os }}-${{ runner.arch }}-1.98-${{ hashFiles('Cargo.lock') }}
+      - name: Restore compiled Rust dependencies
+        id: build-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            target/debug/.fingerprint
+            target/debug/build
+            target/debug/deps/*.rlib
+            target/debug/deps/*.rmeta
+            target/debug/deps/*.d
+            target/debug/deps/*.so
+            target/debug/deps/*.dylib
+            target/debug/deps/*.dll
+            target/debug/deps/*.lib
+            target/debug/xtask*
+            target/debug/scip-*
+            target/debug/filter-clang-compdb*
+            target/debug/release-metadata*
+            target/${{ steps.build-context.outputs.host }}/debug/.fingerprint
+            target/${{ steps.build-context.outputs.host }}/debug/build
+            target/${{ steps.build-context.outputs.host }}/debug/deps/*.rlib
+            target/${{ steps.build-context.outputs.host }}/debug/deps/*.rmeta
+            target/${{ steps.build-context.outputs.host }}/debug/deps/*.d
+            target/${{ steps.build-context.outputs.host }}/debug/deps/*.so
+            target/${{ steps.build-context.outputs.host }}/debug/deps/*.dylib
+            target/${{ steps.build-context.outputs.host }}/debug/deps/*.dll
+            target/${{ steps.build-context.outputs.host }}/debug/deps/*.lib
+            target/${{ steps.build-context.outputs.host }}/debug/xtask*
+          key: scip-build-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.build-context.outputs.host }}-${{ steps.build-context.outputs.abi }}-${{ hashFiles('Cargo.lock', 'Cargo.toml', '.cargo/config.toml', '.github/workflows/rust.yml') }}-${{ github.sha }}
+          restore-keys: |
+            scip-build-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.build-context.outputs.host }}-${{ steps.build-context.outputs.abi }}-${{ hashFiles('Cargo.lock', 'Cargo.toml', '.cargo/config.toml', '.github/workflows/rust.yml') }}-
       - name: Fetch locked Rust dependencies
         run: cargo fetch --locked
+      - name: Save prepared Cargo dependencies
+        if: steps.cargo-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ steps.cargo-cache.outputs.cache-primary-key }}
+      - name: Prepare offline Rust contracts without running tests
+        run: |
+          cargo build --locked --offline --target host-tuple --bin xtask
+          cargo clippy --locked --offline --all-targets -- -D warnings
+          cargo test --locked --offline --no-run
+      - name: Save compiled Rust dependencies before tests
+        if: steps.build-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            target/debug/.fingerprint
+            target/debug/build
+            target/debug/deps/*.rlib
+            target/debug/deps/*.rmeta
+            target/debug/deps/*.d
+            target/debug/deps/*.so
+            target/debug/deps/*.dylib
+            target/debug/deps/*.dll
+            target/debug/deps/*.lib
+            target/debug/xtask*
+            target/debug/scip-*
+            target/debug/filter-clang-compdb*
+            target/debug/release-metadata*
+            target/${{ steps.build-context.outputs.host }}/debug/.fingerprint
+            target/${{ steps.build-context.outputs.host }}/debug/build
+            target/${{ steps.build-context.outputs.host }}/debug/deps/*.rlib
+            target/${{ steps.build-context.outputs.host }}/debug/deps/*.rmeta
+            target/${{ steps.build-context.outputs.host }}/debug/deps/*.d
+            target/${{ steps.build-context.outputs.host }}/debug/deps/*.so
+            target/${{ steps.build-context.outputs.host }}/debug/deps/*.dylib
+            target/${{ steps.build-context.outputs.host }}/debug/deps/*.dll
+            target/${{ steps.build-context.outputs.host }}/debug/deps/*.lib
+            target/${{ steps.build-context.outputs.host }}/debug/xtask*
+          key: ${{ steps.build-cache.outputs.cache-primary-key }}
       - name: Run offline Rust contracts
         run: cargo run --locked --offline --target host-tuple --bin xtask -- check

@@ -180,6 +180,25 @@ and run from a caller-selected output path.
 
 After `cargo fetch --locked`, run the offline standard check with
 `cargo run --locked --offline --target host-tuple --bin xtask -- check`.
+The three native CI jobs cache locked Cargo sources separately from compiled
+Rust libraries, build-script outputs and the actual tool executables. Compiled
+keys retain OS/architecture, Rust host/toolchain, runner image, linker/SDK,
+build options, manifests, lockfile and workflow; only the source revision suffix
+is relaxed during a compatible restore. Incremental state and test executables
+are excluded. SCIP has no native SDK or vcpkg producer to cache in this workflow.
+Cargo may rebuild executable wrappers after restore; a cache hit does not
+guarantee that every target is fresh.
+Windows selects the x64 Visual Studio 2022 environment before probing `cl /Bv`;
+the MSVC toolset, Windows SDK and UCRT versions must be nonempty to form a key.
+
+CI fetches locked inputs even on a cache hit, prepares Clippy and test builds
+offline, and explicitly saves compiled outputs before executing the unchanged
+`xtask check` gate. Formatting, Clippy and all ordinary tests still run on every
+job; cache misses use the same locked/offline path. The Docker image smoke job
+stays separate, and release images retain their existing Buildx caches. Report
+cache transfer, compilation and test execution separately when measuring;
+local warm preparation does not qualify hosted macOS/Windows performance.
+
 For the dispatch suite alone, use `cargo test --locked --offline --test dispatch`.
 Its independent cases exercise the real dispatcher and synthetic processes,
 including command order, cache reuse, argument and environment isolation,
