@@ -188,7 +188,7 @@ is relaxed during a compatible restore. Incremental state and test executables
 are excluded. SCIP has no native SDK or vcpkg producer to cache in this workflow.
 Cargo may rebuild executable wrappers after restore; a cache hit does not
 guarantee that every target is fresh.
-Windows selects the x64 Visual Studio 2022 environment before probing `cl /Bv`;
+Windows selects the installed x64 Visual Studio environment before probing `cl /Bv`;
 the MSVC toolset, Windows SDK and UCRT versions must be nonempty to form a key.
 
 CI fetches locked inputs even on a cache hit, prepares Clippy and test builds

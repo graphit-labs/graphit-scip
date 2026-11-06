@@ -40,15 +40,15 @@ jobs:
         uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: x64
-          vsversion: '2022'
       - name: Identify compiled cache ABI
         id: build-context
         shell: bash
         run: |
           host=$(rustc -vV | sed -n 's/^host: //p')
           test -n "$host"
-          abi=$({
-            set -e
+          identity=$(mktemp "$RUNNER_TEMP/graphit-abi.XXXXXX")
+          trap 'rm -f "$identity"' EXIT
+          {
             rustc -vV
             printf '%s\n' "${RUNNER_OS:?}" "${RUNNER_ARCH:?}" "${ImageOS:?}" "${ImageVersion:?}"
             env | LC_ALL=C sort | sed -n -E '/^(CC|CXX|CFLAGS|CPPFLAGS|CXXFLAGS|LDFLAGS|RUSTFLAGS|RUSTDOCFLAGS|RUSTC_WRAPPER|RUSTC_WORKSPACE_WRAPPER|CARGO_ENCODED_RUSTFLAGS|CARGO_BUILD_TARGET|CARGO_INCREMENTAL|CARGO_PROFILE_.*|CMAKE_.*|GGML_.*|LLAMA_.*|LBUG_.*|CUDA.*|CUDNN.*|OPENSSL_.*|PKG_CONFIG.*|LIBCLANG_PATH)=/p'
@@ -61,7 +61,8 @@ jobs:
                 MSYS_NO_PATHCONV=1 cl /Bv 2>&1 || test "$?" -eq 2
                 ;;
             esac
-          } | git hash-object --stdin)
+          } > "$identity"
+          abi=$(git hash-object --stdin < "$identity")
           printf 'host=%s\nabi=%s\n' "$host" "$abi" >> "$GITHUB_OUTPUT"
       - name: Restore Cargo dependencies
         id: cargo-cache
